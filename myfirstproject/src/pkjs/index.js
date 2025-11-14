@@ -10,40 +10,53 @@ var WEATHER_API_URL = 'http://api.weatherapi.com/v1/current.json';
 var MessageKeys = require('message_keys');
 console.log('MessageKeys loaded: ' + JSON.stringify(MessageKeys));
 
-// Weather icon mapping
-var ICON_MAP = {
-  'sunny': 0,
-  'clear': 0,
-  'partly cloudy': 1,
-  'cloudy': 1,
-  'overcast': 1,
-  'mist': 1,
-  'fog': 1,
-  'patchy rain': 2,
-  'rain': 2,
-  'light rain': 2,
-  'moderate rain': 2,
-  'heavy rain': 2,
-  'patchy snow': 3,
-  'snow': 3,
-  'light snow': 3,
-  'moderate snow': 3,
-  'heavy snow': 3,
-  'blizzard': 3
-};
-
-function getWeatherIcon(condition) {
-  if (!condition) return 1; // Default to cloud
+// Map WeatherAPI condition codes to watch icon IDs (0-7)
+function getWeatherIconFromCode(code, conditionText) {
+  // Sunny/Clear (icon 0)
+  if (code === 1000) return 0;
   
-  var conditionLower = condition.toLowerCase();
+  // Partly cloudy (icon 1)
+  if (code === 1003) return 1;
   
-  for (var key in ICON_MAP) {
-    if (conditionLower.indexOf(key) !== -1) {
-      return ICON_MAP[key];
-    }
+  // Cloudy/Overcast (icon 2)
+  if (code === 1006 || code === 1009) return 2;
+  
+  // Light rain/drizzle (icon 3)
+  var lightRainCodes = [1063, 1150, 1153, 1168, 1171, 1180, 1183, 1186, 1189, 1240];
+  if (lightRainCodes.indexOf(code) !== -1) return 3;
+  
+  // Heavy rain (icon 4)
+  var heavyRainCodes = [1192, 1195, 1198, 1201, 1243, 1246, 1273, 1276];
+  if (heavyRainCodes.indexOf(code) !== -1) return 4;
+  
+  // Light snow (icon 5)
+  var lightSnowCodes = [1066, 1210, 1213, 1216, 1255, 1261, 1279];
+  if (lightSnowCodes.indexOf(code) !== -1) return 5;
+  
+  // Heavy snow/blizzard (icon 6)
+  var heavySnowCodes = [1114, 1117, 1219, 1222, 1225, 1258, 1282];
+  if (heavySnowCodes.indexOf(code) !== -1) return 6;
+  
+  // Mixed rain and snow (icon 7)
+  var mixedCodes = [1069, 1072, 1204, 1207, 1237, 1249, 1252, 1264];
+  if (mixedCodes.indexOf(code) !== -1) return 7;
+  
+  // Mist/fog - map to cloudy
+  if (code === 1030 || code === 1135 || code === 1147) return 2;
+  
+  // Fallback: try text-based matching if code is unknown
+  if (conditionText) {
+    var lower = conditionText.toLowerCase();
+    if (lower.indexOf('snow') !== -1 || lower.indexOf('blizzard') !== -1) return 6;
+    if (lower.indexOf('sleet') !== -1 || lower.indexOf('ice') !== -1) return 7;
+    if (lower.indexOf('rain') !== -1 || lower.indexOf('drizzle') !== -1 || lower.indexOf('shower') !== -1) return 4;
+    if (lower.indexOf('partly') !== -1) return 1;
+    if (lower.indexOf('cloud') !== -1 || lower.indexOf('overcast') !== -1) return 2;
+    if (lower.indexOf('clear') !== -1 || lower.indexOf('sun') !== -1) return 0;
   }
   
-  return 1; // Default to cloud
+  // Default to generic/cloudy
+  return 2;
 }
 
 function fetchWeather(location, useCelsius) {
@@ -62,9 +75,10 @@ function fetchWeather(location, useCelsius) {
         
         var temperature = useCelsius ? response.current.temp_c : response.current.temp_f;
         var condition = response.current.condition.text;
-        var iconCode = getWeatherIcon(condition);
+        var conditionCode = response.current.condition.code;
+        var iconCode = getWeatherIconFromCode(conditionCode, condition);
         
-        console.log('Sending weather: ' + temperature + '°, ' + condition + ', icon: ' + iconCode);
+        console.log('Sending weather: ' + temperature + '°, ' + condition + ' (code: ' + conditionCode + '), icon: ' + iconCode);
         
         // Send weather data to watch
         var dictionary = {};

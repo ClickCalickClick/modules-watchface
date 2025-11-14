@@ -1,5 +1,6 @@
 #include <pebble.h>
 #include <ctype.h>
+#include <string.h>
 #include "config.h"
 
 // UI Elements
@@ -138,12 +139,34 @@ static void update_battery() {
   bitmap_layer_set_bitmap(s_battery_icon_layer, s_battery_icon);
 }
 
-// Update steps (for Pebble 2, no health API)
+// Update steps using Health API
 static void update_steps() {
-  // Pebble 2 (diorite/aplite) doesn't have Health API
-  // Show placeholder
-  snprintf(s_steps_buffer, sizeof(s_steps_buffer), "0");
+  // Check if Health service is available
+  HealthMetric metric = HealthMetricStepCount;
+  time_t start = time_start_of_today();
+  time_t end = time(NULL);
+  
+  // Check if the metric is available
+  HealthServiceAccessibilityMask mask = health_service_metric_accessible(metric, start, end);
+  
+  if (mask & HealthServiceAccessibilityMaskAvailable) {
+    // Data is available
+    int steps = (int)health_service_sum_today(metric);
+    snprintf(s_steps_buffer, sizeof(s_steps_buffer), "%d", steps);
+  } else {
+    // Data not available
+    snprintf(s_steps_buffer, sizeof(s_steps_buffer), "--");
+  }
+  
   text_layer_set_text(s_steps_count_layer, s_steps_buffer);
+}
+
+// Health event handler
+static void health_handler(HealthEventType event, void *context) {
+  // Update step count when health data changes
+  if (event == HealthEventSignificantUpdate || event == HealthEventMovementUpdate) {
+    update_steps();
+  }
 }
 
 // Update weather - will be updated via AppMessage
@@ -153,6 +176,66 @@ static void update_weather() {
   snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "--°");
   text_layer_set_text(s_temperature_layer, s_temperature_buffer);
   text_layer_set_text(s_weather_condition_layer, "--");
+}
+
+// Convert multi-word weather conditions to single words for display
+static const char* get_single_word_condition(const char* condition) {
+  if (!condition) return "Unknown";
+  
+  // Convert to lowercase for easier matching
+  char lower_condition[32];
+  int i = 0;
+  for (; condition[i] && i < 31; i++) {
+    lower_condition[i] = tolower((unsigned char)condition[i]);
+  }
+  lower_condition[i] = '\0';
+  
+  // Get current hour to check if it's after 5 PM
+  time_t temp = time(NULL);
+  struct tm *tick_time = localtime(&temp);
+  int hour = tick_time->tm_hour;
+  
+  // Special handling for "partly" conditions - use the word after "partly"
+  if (strstr(lower_condition, "partly")) {
+    // Find the position after "partly"
+    char* partly_pos = strstr(lower_condition, "partly");
+    char* after_partly = partly_pos + 6; // "partly" is 6 characters
+    
+    // Skip whitespace
+    while (*after_partly == ' ' && *after_partly != '\0') {
+      after_partly++;
+    }
+    
+    // Extract the next word
+    if (*after_partly != '\0') {
+      // Check what the second word is
+      if (strstr(after_partly, "sunny") || strstr(after_partly, "clear")) {
+        return (hour >= 17) ? "Clear" : "Sunny";
+      }
+      if (strstr(after_partly, "cloudy") || strstr(after_partly, "overcast")) return "Cloudy";
+      if (strstr(after_partly, "rain") || strstr(after_partly, "drizzle") || strstr(after_partly, "shower")) return "Rain";
+      if (strstr(after_partly, "snow") || strstr(after_partly, "sleet") || strstr(after_partly, "blizzard") || strstr(after_partly, "ice")) return "Snow";
+      if (strstr(after_partly, "thunder") || strstr(after_partly, "storm")) return "Storm";
+      if (strstr(after_partly, "mist")) return "Mist";
+      if (strstr(after_partly, "fog")) return "Fog";
+    }
+    // If we can't parse the second word, fall back to "Cloudy" as default for partly conditions
+    return "Cloudy";
+  }
+  
+  // Check for other weather patterns and return single words
+  if (strstr(lower_condition, "sunny") || strstr(lower_condition, "clear")) {
+    return (hour >= 17) ? "Clear" : "Sunny";
+  }
+  if (strstr(lower_condition, "cloudy") || strstr(lower_condition, "overcast")) return "Cloudy";
+  if (strstr(lower_condition, "mist")) return "Mist";
+  if (strstr(lower_condition, "fog")) return "Fog";
+  if (strstr(lower_condition, "rain") || strstr(lower_condition, "drizzle") || strstr(lower_condition, "shower")) return "Rain";
+  if (strstr(lower_condition, "snow") || strstr(lower_condition, "sleet") || strstr(lower_condition, "blizzard") || strstr(lower_condition, "ice")) return "Snow";
+  if (strstr(lower_condition, "thunder") || strstr(lower_condition, "storm")) return "Storm";
+  
+  // Default fallback
+  return "Unknown";
 }
 
 // Tick handler
@@ -193,7 +276,8 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   
   if (condition_tuple) {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Condition: %s", condition_tuple->value->cstring);
-    snprintf(s_weather_condition_buffer, sizeof(s_weather_condition_buffer), "%s", condition_tuple->value->cstring);
+    const char* single_word = get_single_word_condition(condition_tuple->value->cstring);
+    snprintf(s_weather_condition_buffer, sizeof(s_weather_condition_buffer), "%s", single_word);
     text_layer_set_text(s_weather_condition_layer, s_weather_condition_buffer);
   } else {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Condition tuple not found");
@@ -404,6 +488,12 @@ static void init() {
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
   battery_state_service_subscribe(battery_callback);
   
+  // Subscribe to health service if available
+  if (health_service_events_subscribe(health_handler, NULL)) {
+    // Force initial update of steps
+    update_steps();
+  }
+  
   // Register AppMessage callbacks
   app_message_register_inbox_received(inbox_received_callback);
   app_message_register_inbox_dropped(inbox_dropped_callback);
@@ -414,6 +504,7 @@ static void init() {
 
 // Deinit
 static void deinit() {
+  health_service_events_unsubscribe();
   window_destroy(s_main_window);
 }
 
