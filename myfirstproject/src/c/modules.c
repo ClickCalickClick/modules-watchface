@@ -43,6 +43,8 @@ static char s_weather_condition_buffer[16];
 
 // Settings
 static bool s_use_celsius = false;
+static int s_current_temperature = 0;
+static bool s_has_temperature = false;
 
 // Background layer update procedure
 static void background_layer_update_proc(Layer *layer, GContext *ctx) {
@@ -267,8 +269,10 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   
   if (temp_tuple) {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature: %d", (int)temp_tuple->value->int32);
+    s_current_temperature = (int)temp_tuple->value->int32;
+    s_has_temperature = true;
     snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", 
-             (int)temp_tuple->value->int32, s_use_celsius ? 'C' : 'F');
+             s_current_temperature, s_use_celsius ? 'C' : 'F');
     text_layer_set_text(s_temperature_layer, s_temperature_buffer);
   } else {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature tuple not found");
@@ -317,6 +321,13 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   if (temp_unit_tuple) {
     s_use_celsius = temp_unit_tuple->value->int32 == 1;
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Use Celsius: %d", s_use_celsius);
+    
+    // If we have temperature data, just update the display format
+    if (s_has_temperature) {
+      snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", 
+               s_current_temperature, s_use_celsius ? 'C' : 'F');
+      text_layer_set_text(s_temperature_layer, s_temperature_buffer);
+    }
   }
   
   APP_LOG(APP_LOG_LEVEL_DEBUG, "=== inbox_received_callback END ===");

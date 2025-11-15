@@ -60,7 +60,7 @@ function getWeatherIconFromCode(code, conditionText) {
 }
 
 function fetchWeather(location, useCelsius) {
-  console.log('Fetching weather for: ' + location);
+  console.log('Fetching weather for: ' + location + ', useCelsius: ' + useCelsius);
   
   var url = WEATHER_API_URL + '?key=' + WEATHER_API_KEY + '&q=' + encodeURIComponent(location);
   
@@ -78,6 +78,7 @@ function fetchWeather(location, useCelsius) {
         var conditionCode = response.current.condition.code;
         var iconCode = getWeatherIconFromCode(conditionCode, condition);
         
+        console.log('useCelsius=' + useCelsius + ', temp_c=' + response.current.temp_c + ', temp_f=' + response.current.temp_f + ', selected=' + temperature);
         console.log('Sending weather: ' + temperature + '°, ' + condition + ' (code: ' + conditionCode + '), icon: ' + iconCode);
         
         // Send weather data to watch
@@ -143,7 +144,7 @@ function getWeather() {
   var zipCode = (settings.ZipCode && settings.ZipCode.value) || '';
   var useCelsius = (settings.TemperatureUnit && settings.TemperatureUnit.value) || false;
   
-  console.log('Getting weather - GPS: ' + useGPS + ', ZIP: ' + zipCode);
+  console.log('Getting weather - GPS: ' + useGPS + ', ZIP: ' + zipCode + ', Celsius: ' + useCelsius);
   
   if (useGPS) {
     // Use GPS location
@@ -202,8 +203,34 @@ Pebble.addEventListener('webviewclosed', function(e) {
   Pebble.sendAppMessage(dictionary,
     function() {
       console.log('Settings sent successfully');
-      // Refresh weather with new settings
-      getWeather();
+      
+      // Fetch weather with the updated settings from the event (not localStorage yet)
+      var useCelsius = (settings.TemperatureUnit && settings.TemperatureUnit.value) || false;
+      var useGPS = (settings.UseGPS && settings.UseGPS.value !== false);
+      var zipCode = (settings.ZipCode && settings.ZipCode.value) || '';
+      
+      console.log('Fetching weather with updated settings - Celsius: ' + useCelsius + ', GPS: ' + useGPS);
+      
+      if (useGPS) {
+        navigator.geolocation.getCurrentPosition(
+          function(pos) {
+            var coords = pos.coords.latitude + ',' + pos.coords.longitude;
+            fetchWeather(coords, useCelsius);
+          },
+          function(err) {
+            console.log('Location error: ' + err.message);
+            if (zipCode.length > 0) {
+              fetchWeather(zipCode, useCelsius);
+            }
+          },
+          {
+            timeout: 15000,
+            maximumAge: 60000
+          }
+        );
+      } else if (zipCode.length > 0) {
+        fetchWeather(zipCode, useCelsius);
+      }
     },
     function(e) {
       console.log('Failed to send settings: ' + JSON.stringify(e));
