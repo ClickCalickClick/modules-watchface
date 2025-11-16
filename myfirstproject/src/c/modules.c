@@ -98,7 +98,7 @@ static const GPoint QUADRANT_ORIGINS[4] = {
 
 // Relative positions for DATE module (relative to quadrant origin)
 static const GRect DATE_LAYOUTS[3] = {
-  {{0, 3}, {72, 17}},   // day name
+  {{0, 0}, {72, 15}},   // day name (moved up 3px)
   {{0, 15}, {72, 66}},  // day number
   {{0, 62}, {72, 76}}   // month name
 };
@@ -159,6 +159,39 @@ static void background_layer_update_proc(Layer *layer, GContext *ctx) {
 static void divider_layer_update_proc(Layer *layer, GContext *ctx) {
   graphics_context_set_stroke_color(ctx, GColorBlack);
   graphics_draw_line(ctx, GPoint(6, 32), GPoint(66, 32)); // Relative to layer position
+}
+
+// Update fonts based on platform and background state
+static void update_fonts_for_background() {
+#ifndef PBL_COLOR
+  // On B&W Pebbles, increase font sizes when backgrounds are enabled
+  // Find which quadrant has DATE module
+  int date_quadrant = -1;
+  int stats_quadrant = -1;
+  
+  for (int q = 0; q < 4; q++) {
+    if (s_quadrant_modules[q] == MODULE_DATE) date_quadrant = q;
+    if (s_quadrant_modules[q] == MODULE_STATS) stats_quadrant = q;
+  }
+  
+  // Update DATE fonts if background is enabled for that quadrant
+  if (date_quadrant >= 0 && s_quadrant_backgrounds[date_quadrant]) {
+    text_layer_set_font(s_day_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+    text_layer_set_font(s_month_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  } else {
+    text_layer_set_font(s_day_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    text_layer_set_font(s_month_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  }
+  
+  // Update STATS fonts if background is enabled for that quadrant
+  if (stats_quadrant >= 0 && s_quadrant_backgrounds[stats_quadrant]) {
+    text_layer_set_font(s_steps_count_layer, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
+    text_layer_set_font(s_steps_label_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  } else {
+    text_layer_set_font(s_steps_count_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+    text_layer_set_font(s_steps_label_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  }
+#endif
 }
 
 // Reposition layers based on module assignments
@@ -268,6 +301,9 @@ static void reposition_layers() {
     layer_set_hidden(text_layer_get_layer(s_steps_label_layer), true);
     layer_set_hidden(s_divider_layer, true);
   }
+  
+  // Update fonts based on background state (B&W only)
+  update_fonts_for_background();
 }
 
 // Update time
@@ -662,6 +698,8 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   // Redraw background if changed
   if (background_changed) {
     layer_mark_dirty(s_background_layer);
+    // Update fonts for B&W platforms when background changes
+    update_fonts_for_background();
   }
   
   APP_LOG(APP_LOG_LEVEL_DEBUG, "=== inbox_received_callback END ===");
