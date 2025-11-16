@@ -98,7 +98,7 @@ static const GPoint QUADRANT_ORIGINS[4] = {
 
 // Relative positions for DATE module (relative to quadrant origin)
 static const GRect DATE_LAYOUTS[3] = {
-  {{0, 0}, {72, 15}},   // day name (moved up 3px)
+  {{0, 0}, {72, 20}},   // day name (increased height for GOTHIC_18_BOLD)
   {{0, 15}, {72, 66}},  // day number
   {{0, 62}, {72, 76}}   // month name
 };
