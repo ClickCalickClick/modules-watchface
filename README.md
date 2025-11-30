@@ -12,7 +12,7 @@
 
 ---
 
-![Modules Watchface Banner](myfirstproject/modules_design_resources/design_overview_color_bw.png)
+![Modules Watchface Banner](myfirstproject/modules_design_resources/design_overview_color_bw2.jpg)
 
 </div>
 
