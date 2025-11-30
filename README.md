@@ -9,6 +9,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
 *Transform your Pebble into a personalized information hub with drag-and-drop modules*
+
 *Note: This watchface supports color Pebbles.  I just didn't take color screenshots.*
 
 ---
