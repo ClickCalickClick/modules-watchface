@@ -301,11 +301,24 @@ Contributions are welcome! Whether it's bug fixes, new modules, or improved docu
 
 ### Ideas for New Modules
 
+Looking for inspiration on what to build next? Check out our comprehensive **[FEATURES.md](FEATURES.md)** file which includes:
+
+- 40+ potential new module ideas (Calendar, Health, Weather, Productivity, and more)
+- 25+ non-module feature enhancements (Layout options, Interactions, Smart features)
+- Implementation priority suggestions
+- Feasibility ratings for each feature
+- Design principles and development considerations
+
+Quick teaser of some popular module ideas:
 - 🔗 Bluetooth connection status
 - 🌅 Sunrise/Sunset times
-- 📍 Compass heading
-- 🎵 Music control
-- ⏱️ Stopwatch/Timer
+- 🌙 Moon phase display
+- ⏱️ Countdown timer & Stopwatch
+- 🌍 World clock
+- 💪 Enhanced fitness modules (Heart rate, Calories, Active minutes)
+- 📊 Pomodoro timer for productivity
+
+**[View the complete feature list →](FEATURES.md)**
 
 ---
 
