@@ -127,7 +127,10 @@ function fetchWeather(location) {
         dictionary[MessageKeys.Condition] = condition;
         dictionary[MessageKeys.WeatherIcon] = iconCode;
         // Also send the temperature unit setting so watch can convert properly
-        dictionary[MessageKeys.TemperatureUnit] = getBool(globalSettings, 'TemperatureUnit', false) ? 1 : 0;
+        var tempUnitValue = getBool(globalSettings, 'TemperatureUnit', false) ? 1 : 0;
+        dictionary[MessageKeys.TemperatureUnit] = tempUnitValue;
+        console.log('Global settings: ' + JSON.stringify(globalSettings));
+        console.log('TemperatureUnit setting: ' + tempUnitValue);
         
         console.log('Dictionary keys: ' + Object.keys(dictionary).join(', '));
         console.log('Dictionary values: ' + JSON.stringify(dictionary));
@@ -203,6 +206,16 @@ function getWeather() {
 // Listen for when the watchface is opened
 Pebble.addEventListener('ready', function() {
   console.log('PebbleKit JS ready!');
+  
+  // Send current settings to watch immediately so it uses correct temperature unit
+  var settingsDict = {};
+  settingsDict[MessageKeys.TemperatureUnit] = getBool(globalSettings, 'TemperatureUnit', false) ? 1 : 0;
+  console.log('Sending initial TemperatureUnit setting: ' + settingsDict[MessageKeys.TemperatureUnit]);
+  Pebble.sendAppMessage(settingsDict, function() {
+    console.log('Initial settings sent');
+  }, function(e) {
+    console.log('Failed to send initial settings: ' + JSON.stringify(e));
+  });
   
   // Get initial weather
   getWeather();

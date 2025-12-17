@@ -659,7 +659,7 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   Tuple *temp_unit_tuple = dict_find(iterator, MESSAGE_KEY_TemperatureUnit);
   if (temp_unit_tuple) {
     s_use_celsius = temp_unit_tuple->value->int32 == 1;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Use Celsius: %d", s_use_celsius);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Received TemperatureUnit: %d, setting s_use_celsius to: %d", (int)temp_unit_tuple->value->int32, s_use_celsius);
     
     // If we have temperature data, update display with conversion
     if (s_has_temperature) {
