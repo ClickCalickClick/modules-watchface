@@ -247,14 +247,32 @@ Pebble.addEventListener('webviewclosed', function(e) {
   
   // Settings were saved, update global state and persist
   var settings = JSON.parse(e.response);
-  globalSettings = settings;  // Update global state immediately
-  console.log('Settings received and updated globally: ' + JSON.stringify(settings).substring(0, 200));
-  console.log('globalSettings.TemperatureUnit: ' + JSON.stringify(globalSettings.TemperatureUnit));
+  // Flatten settings before storing in globalSettings
+  var flatSettings = {};
+  for (var key in settings) {
+    if (settings[key] && typeof settings[key] === 'object' && 'value' in settings[key]) {
+      flatSettings[key] = settings[key].value;
+    } else {
+      flatSettings[key] = settings[key];
+    }
+  }
+  globalSettings = flatSettings;  // Update global state with flattened format
+  console.log('Settings received and updated globally (flattened): ' + JSON.stringify(globalSettings).substring(0, 200));
+  console.log('globalSettings.TemperatureUnit: ' + globalSettings.TemperatureUnit);
   
   // Persist the latest settings so periodic updates use the correct values
+  // Flatten settings before storing (Clay stores with .value, but we need flattened format)
+  var flatSettings = {};
+  for (var key in settings) {
+    if (settings[key] && typeof settings[key] === 'object' && 'value' in settings[key]) {
+      flatSettings[key] = settings[key].value;
+    } else {
+      flatSettings[key] = settings[key];
+    }
+  }
   try {
-    localStorage.setItem('clay-settings', JSON.stringify(settings));
-    console.log('Settings persisted to localStorage');
+    localStorage.setItem('clay-settings', JSON.stringify(flatSettings));
+    console.log('Settings persisted to localStorage (flattened): ' + JSON.stringify(flatSettings).substring(0, 100));
   } catch (err) {
     console.log('Failed to persist settings: ' + err);
   }
