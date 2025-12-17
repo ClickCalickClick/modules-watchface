@@ -189,6 +189,10 @@ function locationError(err) {
 
 function getWeather() {
   var stored = localStorage.getItem("clay-settings");
+  console.log("RAW localStorage value: " + stored);
+  console.log("Parsed currentSettings: " + JSON.stringify(currentSettings).substring(0, 200));
+  var useCelsius = getBool(currentSettings, "TemperatureUnit", false);
+  console.log("useCelsius read from localStorage: " + useCelsius);
   var currentSettings = stored ? JSON.parse(stored) : {};
   var useGPS = getBool(currentSettings, 'UseGPS', true); // Default to true
   var zipCode = getString(currentSettings, 'ZipCode', '');
