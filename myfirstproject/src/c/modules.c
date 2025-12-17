@@ -574,8 +574,9 @@ static const char* get_single_word_condition(const char* condition) {
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   update_time();
   
-  // Update weather every 2 minutes (for quick debugging)
-  if (tick_time->tm_min % 2 == 0 && tick_time->tm_sec == 0) {
+  // Update weather every minute (for quick debugging)
+  // if (tick_time->tm_min % 2 == 0 && tick_time->tm_sec == 0) {
+  if (true) { // Trigger every minute for testing
     DictionaryIterator *iter;
     app_message_outbox_begin(&iter);
     dict_write_uint8(iter, MESSAGE_KEY_Temperature, 1);
