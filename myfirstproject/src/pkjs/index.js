@@ -14,9 +14,12 @@ console.log('MessageKeys loaded: ' + JSON.stringify(MessageKeys));
 var globalSettings = {};
 try {
   var stored = localStorage.getItem('clay-settings');
+  console.log('RAW localStorage clay-settings: ' + stored);
   if (stored) {
     globalSettings = JSON.parse(stored);
     console.log('Loaded settings from localStorage: ' + JSON.stringify(globalSettings));
+  } else {
+    console.log('WARNING: clay-settings is null/empty in localStorage');
   }
 } catch (err) {
   console.log('Failed to load settings from localStorage: ' + err);
@@ -130,7 +133,9 @@ function fetchWeather(location) {
         var tempUnitValue = getBool(globalSettings, 'TemperatureUnit', false) ? 1 : 0;
         dictionary[MessageKeys.TemperatureUnit] = tempUnitValue;
         console.log('Global settings: ' + JSON.stringify(globalSettings));
-        console.log('TemperatureUnit setting: ' + tempUnitValue);
+        console.log('getBool result: ' + getBool(globalSettings, 'TemperatureUnit', false));
+        console.log('TemperatureUnit value to send: ' + tempUnitValue);
+        console.log('Full dictionary: ' + JSON.stringify(dictionary));
         
         console.log('Dictionary keys: ' + Object.keys(dictionary).join(', '));
         console.log('Dictionary values: ' + JSON.stringify(dictionary));
