@@ -598,11 +598,20 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   Tuple *condition_tuple = dict_find(iterator, MESSAGE_KEY_Condition);
   
   if (temp_tuple) {
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature: %d", (int)temp_tuple->value->int32);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature (Fahrenheit): %d", (int)temp_tuple->value->int32);
     s_current_temperature = (int)temp_tuple->value->int32;
     s_has_temperature = true;
-    snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", 
-             s_current_temperature, s_use_celsius ? 'C' : 'F');
+    
+    // Display temperature with unit conversion if needed
+    int display_temp = s_current_temperature;
+    char unit = 'F';
+    if (s_use_celsius) {
+      // Convert Fahrenheit to Celsius: (F - 32) * 5 / 9
+      display_temp = (s_current_temperature - 32) * 5 / 9;
+      unit = 'C';
+    }
+    
+    snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", display_temp, unit);
     text_layer_set_text(s_temperature_layer, s_temperature_buffer);
   } else {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature tuple not found");
@@ -652,10 +661,16 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
     s_use_celsius = temp_unit_tuple->value->int32 == 1;
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Use Celsius: %d", s_use_celsius);
     
-    // If we have temperature data, just update the display format
+    // If we have temperature data, update display with conversion
     if (s_has_temperature) {
-      snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", 
-               s_current_temperature, s_use_celsius ? 'C' : 'F');
+      int display_temp = s_current_temperature;
+      char unit = 'F';
+      if (s_use_celsius) {
+        // Convert Fahrenheit to Celsius: (F - 32) * 5 / 9
+        display_temp = (s_current_temperature - 32) * 5 / 9;
+        unit = 'C';
+      }
+      snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", display_temp, unit);
       text_layer_set_text(s_temperature_layer, s_temperature_buffer);
     }
   }

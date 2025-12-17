@@ -95,7 +95,7 @@ function getWeatherIconFromCode(code, conditionText) {
   return 2;
 }
 
-function fetchWeather(location, useCelsius) {
+function fetchWeather(location) {
   console.log('Fetching weather for: ' + location + ', useCelsius: ' + useCelsius);
   
   var url = WEATHER_API_URL + '?key=' + WEATHER_API_KEY + '&q=' + encodeURIComponent(location);
@@ -114,14 +114,20 @@ function fetchWeather(location, useCelsius) {
         var conditionCode = response.current.condition.code;
         var iconCode = getWeatherIconFromCode(conditionCode, condition);
         
-        console.log('useCelsius=' + useCelsius + ', temp_c=' + response.current.temp_c + ', temp_f=' + response.current.temp_f + ', selected=' + temperature);
-        console.log('Sending weather: ' + temperature + '°, ' + condition + ' (code: ' + conditionCode + '), icon: ' + iconCode);
+        // Always send raw Fahrenheit - let the watch convert based on its setting
+        var tempFahrenheit = response.current.temp_f;
+        var tempCelsius = response.current.temp_c;
+        
+        console.log('Temperature data - F: ' + tempFahrenheit + ', C: ' + tempCelsius);
+        console.log('Sending weather: F=' + tempFahrenheit + '°F, C=' + tempCelsius + '°C, ' + condition + ' (code: ' + conditionCode + '), icon: ' + iconCode);
         
         // Send weather data to watch
         var dictionary = {};
-        dictionary[MessageKeys.Temperature] = Math.round(temperature);
+        dictionary[MessageKeys.Temperature] = Math.round(tempFahrenheit);
         dictionary[MessageKeys.Condition] = condition;
         dictionary[MessageKeys.WeatherIcon] = iconCode;
+        // Also send the temperature unit setting so watch can convert properly
+        dictionary[MessageKeys.TemperatureUnit] = getBool(globalSettings, 'TemperatureUnit', false) ? 1 : 0;
         
         console.log('Dictionary keys: ' + Object.keys(dictionary).join(', '));
         console.log('Dictionary values: ' + JSON.stringify(dictionary));
@@ -153,10 +159,7 @@ function locationSuccess(pos) {
   var coords = pos.coords.latitude + ',' + pos.coords.longitude;
   console.log('Got location: ' + coords);
   
-  var useCelsius = getBool(globalSettings, 'TemperatureUnit', false);
-  console.log('locationSuccess - Using Celsius: ' + useCelsius);
-  
-  fetchWeather(coords, useCelsius);
+  fetchWeather(coords);
 }
 
 function locationError(err) {
@@ -164,11 +167,9 @@ function locationError(err) {
   
   // Fall back to ZIP code if available
   var zipCode = getString(globalSettings, 'ZipCode', '');
-  var useCelsius = getBool(globalSettings, 'TemperatureUnit', false);
-  console.log('locationError - Zip: ' + zipCode + ', Using Celsius: ' + useCelsius);
   
   if (zipCode && zipCode.length > 0) {
-    fetchWeather(zipCode, useCelsius);
+    fetchWeather(zipCode);
   } else {
     console.log('No fallback location available');
   }
@@ -177,7 +178,7 @@ function locationError(err) {
 function getWeather() {
   var useGPS = getBool(globalSettings, 'UseGPS', true); // Default to true
   var zipCode = getString(globalSettings, 'ZipCode', '');
-  var useCelsius = getBool(globalSettings, 'TemperatureUnit', false);
+  
   
   console.log('Getting weather - GPS: ' + useGPS + ', ZIP: ' + zipCode + ', Celsius: ' + useCelsius);
   
@@ -193,7 +194,7 @@ function getWeather() {
     );
   } else if (zipCode.length > 0) {
     // Use manual ZIP code/city
-    fetchWeather(zipCode, useCelsius);
+    fetchWeather(zipCode);
   } else {
     console.log('No location method configured');
   }
@@ -333,12 +334,12 @@ Pebble.addEventListener('webviewclosed', function(e) {
         navigator.geolocation.getCurrentPosition(
           function(pos) {
             var coords = pos.coords.latitude + ',' + pos.coords.longitude;
-            fetchWeather(coords, useCelsius);
+            fetchWeather(coords);
           },
           function(err) {
             console.log('Location error: ' + err.message);
             if (zipCode.length > 0) {
-              fetchWeather(zipCode, useCelsius);
+              fetchWeather(zipCode);
             }
           },
           {
@@ -347,7 +348,7 @@ Pebble.addEventListener('webviewclosed', function(e) {
           }
         );
       } else if (zipCode.length > 0) {
-        fetchWeather(zipCode, useCelsius);
+        fetchWeather(zipCode);
       }
     },
     function(e) {
