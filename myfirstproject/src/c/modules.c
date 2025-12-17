@@ -572,15 +572,18 @@ static const char* get_single_word_condition(const char* condition) {
 
 // Tick handler
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "=== TICK HANDLER CALLED ===");
   update_time();
   
   // Update weather every minute (for quick debugging)
   // if (tick_time->tm_min % 2 == 0 && tick_time->tm_sec == 0) {
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "About to send weather update request");
   if (true) { // Trigger every minute for testing
     DictionaryIterator *iter;
     app_message_outbox_begin(&iter);
     dict_write_uint8(iter, MESSAGE_KEY_Temperature, 1);
     app_message_outbox_send();
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Weather update request sent");
   }
 }
 
