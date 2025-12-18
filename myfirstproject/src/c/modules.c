@@ -664,6 +664,9 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   if (temp_unit_tuple) {
     s_use_celsius = temp_unit_tuple->value->int32 == 1;
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Received TemperatureUnit: %d, setting s_use_celsius to: %d", (int)temp_unit_tuple->value->int32, s_use_celsius);
+    // Persist this setting so it survives app restarts
+    persist_write_bool(1, s_use_celsius);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Persisted s_use_celsius: %d", s_use_celsius);
     
     // If we have temperature data, update display with conversion
     if (s_has_temperature) {
@@ -1116,6 +1119,12 @@ static void init() {
   s_custom_text_color[3] = persist_exists(PERSIST_KEY_Q4_TEXT_COLOR) ? 
     GColorFromHEX(persist_read_int(PERSIST_KEY_Q4_TEXT_COLOR)) : GColorBlack;
 #endif
+  
+  // Load persisted settings from storage
+  if (persist_exists(1)) {
+    s_use_celsius = persist_read_bool(1);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Loaded persisted s_use_celsius: %d", s_use_celsius);
+  }
   
   // Create main window
   s_main_window = window_create();
