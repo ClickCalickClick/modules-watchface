@@ -575,10 +575,8 @@ static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   APP_LOG(APP_LOG_LEVEL_DEBUG, "=== TICK HANDLER CALLED ===");
   update_time();
   
-  // Update weather every minute (for quick debugging)
-  // if (tick_time->tm_min % 2 == 0 && tick_time->tm_sec == 0) {
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "About to send weather update request");
-  if (true) { // Trigger every minute for testing
+  // Update weather every 30 minutes
+  if (tick_time->tm_min % 30 == 0) {
     DictionaryIterator *iter;
     app_message_outbox_begin(&iter);
     dict_write_uint8(iter, MESSAGE_KEY_Temperature, 1);
@@ -1146,7 +1144,7 @@ static void init() {
   window_stack_push(s_main_window, true);
   
   // Register services
-  tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
+  tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
   battery_state_service_subscribe(battery_callback);
   
   // Subscribe to health service if available
