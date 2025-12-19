@@ -610,6 +610,17 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
     int display_temp = s_current_temperature;
     char unit = 'F';
     if (s_use_celsius) {
+    
+    // Display temperature immediately with current s_use_celsius setting
+    int display_temp = s_current_temperature;
+    char unit = 'F';
+    if (s_use_celsius) {
+      display_temp = (s_current_temperature - 32) * 5 / 9;
+      unit = 'C';
+    }
+    snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", display_temp, unit);
+    text_layer_set_text(s_temperature_layer, s_temperature_buffer);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature updated: %d°%c (use_celsius=%d)", display_temp, unit, s_use_celsius);
       // Convert Fahrenheit to Celsius: (F - 32) * 5 / 9
       display_temp = (s_current_temperature - 32) * 5 / 9;
       unit = 'C';
