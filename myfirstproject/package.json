@@ -26,6 +26,7 @@
       "Condition",
       "WeatherIcon",
       "TemperatureUnit",
+      "AltWeatherLayout",
       "UseGPS",
       "ZipCode",
       "Quadrant1Module",
@@ -118,8 +119,133 @@
         },
         {
           "type": "bitmap",
+          "name": "ICON_WEATHER_CLEAR_NIGHT",
+          "file": "images/Clear-night.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_NIGHT_PARTLY_CLOUDY",
+          "file": "images/Night-partly-cloudy.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_NIGHT_CLOUDY",
+          "file": "images/Night-cloudy.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_NIGHT_LIGHT_RAIN",
+          "file": "images/Night-light-rain.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_NIGHT_HEAVY_RAIN",
+          "file": "images/Night-heavy-rain.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_NIGHT_LIGHT_SNOW",
+          "file": "images/Night-light-snow.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_NIGHT_HEAVY_SNOW",
+          "file": "images/Night-heavy-snow.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_NIGHT_RAIN_SNOW",
+          "file": "images/Night-rain-snow.png"
+        },
+        {
+          "type": "bitmap",
           "name": "ICON_WEATHER_GENERIC",
           "file": "images/Generic-weather.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_SUNNY_ALT",
+          "file": "images/alt/Sunny-day.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_PARTLY_CLOUDY_ALT",
+          "file": "images/alt/Partly-cloudy.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_CLOUDY_ALT",
+          "file": "images/alt/Cloudy-weather.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_LIGHT_RAIN_ALT",
+          "file": "images/alt/Light-rain.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_HEAVY_RAIN_ALT",
+          "file": "images/alt/Heavy-rain.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_LIGHT_SNOW_ALT",
+          "file": "images/alt/Light-snow.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_HEAVY_SNOW_ALT",
+          "file": "images/alt/Heavy-snow.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_RAIN_SNOW_ALT",
+          "file": "images/alt/Raining-and-snowing.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_CLEAR_NIGHT_ALT",
+          "file": "images/alt/Clear-night.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_NIGHT_PARTLY_CLOUDY_ALT",
+          "file": "images/alt/Night-partly-cloudy.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_NIGHT_CLOUDY_ALT",
+          "file": "images/alt/Night-cloudy.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_NIGHT_LIGHT_RAIN_ALT",
+          "file": "images/alt/Night-light-rain.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_NIGHT_HEAVY_RAIN_ALT",
+          "file": "images/alt/Night-heavy-rain.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_NIGHT_LIGHT_SNOW_ALT",
+          "file": "images/alt/Night-light-snow.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_NIGHT_HEAVY_SNOW_ALT",
+          "file": "images/alt/Night-heavy-snow.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_NIGHT_RAIN_SNOW_ALT",
+          "file": "images/alt/Night-rain-snow.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_WEATHER_GENERIC_ALT",
+          "file": "images/alt/Generic-weather.png"
         }
       ]
     },

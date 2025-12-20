@@ -33,6 +33,7 @@ typedef enum {
 #define PERSIST_KEY_Q2_TEXT_COLOR 117
 #define PERSIST_KEY_Q3_TEXT_COLOR 118
 #define PERSIST_KEY_Q4_TEXT_COLOR 119
+#define PERSIST_KEY_ALT_WEATHER_LAYOUT 120
 
 // UI Elements
 static Window *s_main_window;
@@ -74,8 +75,10 @@ static char s_weather_condition_buffer[16];
 
 // Settings
 static bool s_use_celsius = false;
+static bool s_alt_weather_layout = false;
 static int s_current_temperature = 0;
 static bool s_has_temperature = false;
+static int s_current_icon_id = -1;
 
 // Module assignments for each quadrant
 static ModuleType s_quadrant_modules[4] = {
@@ -166,10 +169,16 @@ static const GRect DATE_LAYOUTS[3] = {
 };
 
 // Relative positions for WEATHER module (relative to quadrant origin)
-static const GRect WEATHER_LAYOUTS[3] = {
+static const GRect WEATHER_LAYOUTS_DEFAULT[3] = {
   {{22, 2}, {28, 30}},  // icon (centered: 72/2 - 28/2 = 22)
   {{0, 30}, {72, 58}},  // temperature
   {{0, 55}, {72, 79}}   // condition
+};
+
+static const GRect WEATHER_LAYOUTS_ALT[3] = {
+  {{9, 0}, {54, 54}},   // icon (centered: 72/2 - 54/2 = 9)
+  {{0, 45}, {72, 30}},  // temperature (moved up to 45)
+  {{0, 84}, {72, 0}}    // condition (hidden)
 };
 
 // Relative positions for TIME module (relative to quadrant origin)
@@ -315,20 +324,22 @@ static void reposition_layers() {
         layer_set_hidden(text_layer_get_layer(s_month_name_layer), false);
         break;
         
-      case MODULE_WEATHER:
+      case MODULE_WEATHER: {
+        const GRect *layout = s_alt_weather_layout ? WEATHER_LAYOUTS_ALT : WEATHER_LAYOUTS_DEFAULT;
         layer_set_frame(bitmap_layer_get_layer(s_weather_icon_layer),
-          GRect(origin.x + WEATHER_LAYOUTS[0].origin.x, origin.y + WEATHER_LAYOUTS[0].origin.y,
-                WEATHER_LAYOUTS[0].size.w, WEATHER_LAYOUTS[0].size.h));
+          GRect(origin.x + layout[0].origin.x, origin.y + layout[0].origin.y,
+                layout[0].size.w, layout[0].size.h));
         layer_set_frame(text_layer_get_layer(s_temperature_layer),
-          GRect(origin.x + WEATHER_LAYOUTS[1].origin.x, origin.y + WEATHER_LAYOUTS[1].origin.y,
-                WEATHER_LAYOUTS[1].size.w, WEATHER_LAYOUTS[1].size.h));
+          GRect(origin.x + layout[1].origin.x, origin.y + layout[1].origin.y,
+                layout[1].size.w, layout[1].size.h));
         layer_set_frame(text_layer_get_layer(s_weather_condition_layer),
-          GRect(origin.x + WEATHER_LAYOUTS[2].origin.x, origin.y + WEATHER_LAYOUTS[2].origin.y,
-                WEATHER_LAYOUTS[2].size.w, WEATHER_LAYOUTS[2].size.h));
+          GRect(origin.x + layout[2].origin.x, origin.y + layout[2].origin.y,
+                layout[2].size.w, layout[2].size.h));
         layer_set_hidden(bitmap_layer_get_layer(s_weather_icon_layer), false);
         layer_set_hidden(text_layer_get_layer(s_temperature_layer), false);
         layer_set_hidden(text_layer_get_layer(s_weather_condition_layer), false);
         break;
+      }
         
       case MODULE_TIME:
         layer_set_frame(text_layer_get_layer(s_hour_layer),
@@ -572,6 +583,7 @@ static const char* get_single_word_condition(const char* condition) {
 
 // Tick handler
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "=== TICK HANDLER CALLED ===");
   update_time();
   
   // Update weather every 30 minutes
@@ -580,12 +592,57 @@ static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
     app_message_outbox_begin(&iter);
     dict_write_uint8(iter, MESSAGE_KEY_Temperature, 1);
     app_message_outbox_send();
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Weather update request sent");
   }
 }
 
 // Battery callback
 static void battery_callback(BatteryChargeState charge_state) {
   update_battery();
+}
+
+static uint32_t get_resource_id_for_weather_icon(int icon_id) {
+  if (s_alt_weather_layout) {
+    switch(icon_id) {
+      case 0: return RESOURCE_ID_ICON_WEATHER_SUNNY_ALT;
+      case 1: return RESOURCE_ID_ICON_WEATHER_PARTLY_CLOUDY_ALT;
+      case 2: return RESOURCE_ID_ICON_WEATHER_CLOUDY_ALT;
+      case 3: return RESOURCE_ID_ICON_WEATHER_LIGHT_RAIN_ALT;
+      case 4: return RESOURCE_ID_ICON_WEATHER_HEAVY_RAIN_ALT;
+      case 5: return RESOURCE_ID_ICON_WEATHER_LIGHT_SNOW_ALT;
+      case 6: return RESOURCE_ID_ICON_WEATHER_HEAVY_SNOW_ALT;
+      case 7: return RESOURCE_ID_ICON_WEATHER_RAIN_SNOW_ALT;
+      case 8: return RESOURCE_ID_ICON_WEATHER_CLEAR_NIGHT_ALT;
+      case 9: return RESOURCE_ID_ICON_WEATHER_NIGHT_PARTLY_CLOUDY_ALT;
+      case 10: return RESOURCE_ID_ICON_WEATHER_NIGHT_CLOUDY_ALT;
+      case 11: return RESOURCE_ID_ICON_WEATHER_NIGHT_LIGHT_RAIN_ALT;
+      case 12: return RESOURCE_ID_ICON_WEATHER_NIGHT_HEAVY_RAIN_ALT;
+      case 13: return RESOURCE_ID_ICON_WEATHER_NIGHT_LIGHT_SNOW_ALT;
+      case 14: return RESOURCE_ID_ICON_WEATHER_NIGHT_HEAVY_SNOW_ALT;
+      case 15: return RESOURCE_ID_ICON_WEATHER_NIGHT_RAIN_SNOW_ALT;
+      default: return RESOURCE_ID_ICON_WEATHER_GENERIC_ALT;
+    }
+  } else {
+    switch(icon_id) {
+      case 0: return RESOURCE_ID_ICON_WEATHER_SUNNY;
+      case 1: return RESOURCE_ID_ICON_WEATHER_PARTLY_CLOUDY;
+      case 2: return RESOURCE_ID_ICON_WEATHER_CLOUDY;
+      case 3: return RESOURCE_ID_ICON_WEATHER_LIGHT_RAIN;
+      case 4: return RESOURCE_ID_ICON_WEATHER_HEAVY_RAIN;
+      case 5: return RESOURCE_ID_ICON_WEATHER_LIGHT_SNOW;
+      case 6: return RESOURCE_ID_ICON_WEATHER_HEAVY_SNOW;
+      case 7: return RESOURCE_ID_ICON_WEATHER_RAIN_SNOW;
+      case 8: return RESOURCE_ID_ICON_WEATHER_CLEAR_NIGHT;
+      case 9: return RESOURCE_ID_ICON_WEATHER_NIGHT_PARTLY_CLOUDY;
+      case 10: return RESOURCE_ID_ICON_WEATHER_NIGHT_CLOUDY;
+      case 11: return RESOURCE_ID_ICON_WEATHER_NIGHT_LIGHT_RAIN;
+      case 12: return RESOURCE_ID_ICON_WEATHER_NIGHT_HEAVY_RAIN;
+      case 13: return RESOURCE_ID_ICON_WEATHER_NIGHT_LIGHT_SNOW;
+      case 14: return RESOURCE_ID_ICON_WEATHER_NIGHT_HEAVY_SNOW;
+      case 15: return RESOURCE_ID_ICON_WEATHER_NIGHT_RAIN_SNOW;
+      default: return RESOURCE_ID_ICON_WEATHER_GENERIC;
+    }
+  }
 }
 
 // Inbox received callback
@@ -598,11 +655,31 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   Tuple *condition_tuple = dict_find(iterator, MESSAGE_KEY_Condition);
   
   if (temp_tuple) {
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature: %d", (int)temp_tuple->value->int32);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature (Fahrenheit): %d", (int)temp_tuple->value->int32);
     s_current_temperature = (int)temp_tuple->value->int32;
     s_has_temperature = true;
-    snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", 
-             s_current_temperature, s_use_celsius ? 'C' : 'F');
+    
+    // Display temperature with unit conversion if needed
+    int display_temp = s_current_temperature;
+    char unit = 'F';
+    if (s_use_celsius) {
+    
+    // Display temperature immediately with current s_use_celsius setting
+    int display_temp = s_current_temperature;
+    char unit = 'F';
+    if (s_use_celsius) {
+      display_temp = (s_current_temperature - 32) * 5 / 9;
+      unit = 'C';
+    }
+    snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", display_temp, unit);
+    text_layer_set_text(s_temperature_layer, s_temperature_buffer);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature updated: %d°%c (use_celsius=%d)", display_temp, unit, s_use_celsius);
+      // Convert Fahrenheit to Celsius: (F - 32) * 5 / 9
+      display_temp = (s_current_temperature - 32) * 5 / 9;
+      unit = 'C';
+    }
+    
+    snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", display_temp, unit);
     text_layer_set_text(s_temperature_layer, s_temperature_buffer);
   } else {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature tuple not found");
@@ -624,21 +701,9 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
     }
     
     int icon_id = (int)icon_tuple->value->int32;
+    s_current_icon_id = icon_id;
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Weather icon ID: %d", icon_id);
-    uint32_t resource_id = RESOURCE_ID_ICON_WEATHER_GENERIC; // Default
-    
-    // Map icon IDs to new weather icon resources
-    switch(icon_id) {
-      case 0: resource_id = RESOURCE_ID_ICON_WEATHER_SUNNY; break;           // Clear/Sunny
-      case 1: resource_id = RESOURCE_ID_ICON_WEATHER_PARTLY_CLOUDY; break;   // Partly Cloudy
-      case 2: resource_id = RESOURCE_ID_ICON_WEATHER_CLOUDY; break;          // Cloudy
-      case 3: resource_id = RESOURCE_ID_ICON_WEATHER_LIGHT_RAIN; break;      // Light Rain
-      case 4: resource_id = RESOURCE_ID_ICON_WEATHER_HEAVY_RAIN; break;      // Heavy Rain/Rain
-      case 5: resource_id = RESOURCE_ID_ICON_WEATHER_LIGHT_SNOW; break;      // Light Snow
-      case 6: resource_id = RESOURCE_ID_ICON_WEATHER_HEAVY_SNOW; break;      // Heavy Snow/Snow
-      case 7: resource_id = RESOURCE_ID_ICON_WEATHER_RAIN_SNOW; break;       // Rain and Snow
-      default: resource_id = RESOURCE_ID_ICON_WEATHER_GENERIC; break;        // Generic/Unknown
-    }
+    uint32_t resource_id = get_resource_id_for_weather_icon(icon_id);
     
     s_weather_icon = gbitmap_create_with_resource(resource_id);
     bitmap_layer_set_bitmap(s_weather_icon_layer, s_weather_icon);
@@ -650,12 +715,21 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   Tuple *temp_unit_tuple = dict_find(iterator, MESSAGE_KEY_TemperatureUnit);
   if (temp_unit_tuple) {
     s_use_celsius = temp_unit_tuple->value->int32 == 1;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Use Celsius: %d", s_use_celsius);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Received TemperatureUnit: %d, setting s_use_celsius to: %d", (int)temp_unit_tuple->value->int32, s_use_celsius);
+    // Persist this setting so it survives app restarts
+    persist_write_bool(1, s_use_celsius);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Persisted s_use_celsius: %d", s_use_celsius);
     
-    // If we have temperature data, just update the display format
+    // If we have temperature data, update display with conversion
     if (s_has_temperature) {
-      snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", 
-               s_current_temperature, s_use_celsius ? 'C' : 'F');
+      int display_temp = s_current_temperature;
+      char unit = 'F';
+      if (s_use_celsius) {
+        // Convert Fahrenheit to Celsius: (F - 32) * 5 / 9
+        display_temp = (s_current_temperature - 32) * 5 / 9;
+        unit = 'C';
+      }
+      snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", display_temp, unit);
       text_layer_set_text(s_temperature_layer, s_temperature_buffer);
     }
   }
@@ -667,6 +741,36 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   Tuple *q4_tuple = dict_find(iterator, MESSAGE_KEY_Quadrant4Module);
   
   bool layout_changed = false;
+
+  // Read Alt Weather Layout setting
+  Tuple *alt_layout_tuple = dict_find(iterator, MESSAGE_KEY_AltWeatherLayout);
+  if (alt_layout_tuple) {
+    bool new_layout = alt_layout_tuple->value->int32 == 1;
+    if (s_alt_weather_layout != new_layout) {
+      s_alt_weather_layout = new_layout;
+      persist_write_bool(PERSIST_KEY_ALT_WEATHER_LAYOUT, s_alt_weather_layout);
+      layout_changed = true;
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "Alt Weather Layout changed to: %d", s_alt_weather_layout);
+      
+      // Force reload of weather icon with new layout
+      if (s_weather_icon) {
+        gbitmap_destroy(s_weather_icon);
+        s_weather_icon = NULL;
+      }
+      
+      uint32_t resource_id;
+      if (s_current_icon_id >= 0) {
+        resource_id = get_resource_id_for_weather_icon(s_current_icon_id);
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "Reloading icon %d with resource %d", s_current_icon_id, (int)resource_id);
+      } else {
+        resource_id = s_alt_weather_layout ? RESOURCE_ID_ICON_WEATHER_GENERIC_ALT : RESOURCE_ID_ICON_WEATHER_GENERIC;
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "Reloading generic icon with resource %d", (int)resource_id);
+      }
+      
+      s_weather_icon = gbitmap_create_with_resource(resource_id);
+      bitmap_layer_set_bitmap(s_weather_icon_layer, s_weather_icon);
+    }
+  }
   
   if (q1_tuple) {
     ModuleType new_module = (ModuleType)q1_tuple->value->int32;
@@ -925,24 +1029,24 @@ static void main_window_load(Window *window) {
   layer_add_child(window_layer, text_layer_get_layer(s_month_name_layer));
   
   // QUADRANT 2 - WEATHER (Top Right) - moved up 10 pixels, removed condition text
-  s_weather_icon_layer = bitmap_layer_create(GRect(94, 2, 28, 28));
+  s_weather_icon_layer = bitmap_layer_create(GRect(81, 0, 54, 54));
   bitmap_layer_set_background_color(s_weather_icon_layer, GColorClear);
   bitmap_layer_set_compositing_mode(s_weather_icon_layer, GCompOpSet);
-  s_weather_icon = gbitmap_create_with_resource(RESOURCE_ID_ICON_WEATHER_GENERIC);
+  s_weather_icon = gbitmap_create_with_resource(s_alt_weather_layout ? RESOURCE_ID_ICON_WEATHER_GENERIC_ALT : RESOURCE_ID_ICON_WEATHER_GENERIC);
   bitmap_layer_set_bitmap(s_weather_icon_layer, s_weather_icon);
   layer_add_child(window_layer, bitmap_layer_get_layer(s_weather_icon_layer));
   
-  s_temperature_layer = text_layer_create(GRect(72, 30, 72, 54));
+  s_temperature_layer = text_layer_create(GRect(72, 54, 72, 30));
   text_layer_set_background_color(s_temperature_layer, GColorClear);
   text_layer_set_text_color(s_temperature_layer, GColorBlack);
   text_layer_set_font(s_temperature_layer, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
   text_layer_set_text_alignment(s_temperature_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_temperature_layer));
   
-  s_weather_condition_layer = text_layer_create(GRect(72, 55, 72, 68));
+  s_weather_condition_layer = text_layer_create(GRect(72, 84, 72, 0));
   text_layer_set_background_color(s_weather_condition_layer, GColorClear);
   text_layer_set_text_color(s_weather_condition_layer, GColorBlack);
-  text_layer_set_font(s_weather_condition_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+  text_layer_set_font(s_weather_condition_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
   text_layer_set_text_alignment(s_weather_condition_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_weather_condition_layer));
   
@@ -1097,6 +1201,17 @@ static void init() {
   s_custom_text_color[3] = persist_exists(PERSIST_KEY_Q4_TEXT_COLOR) ? 
     GColorFromHEX(persist_read_int(PERSIST_KEY_Q4_TEXT_COLOR)) : GColorBlack;
 #endif
+  
+  // Load persisted settings from storage
+  if (persist_exists(1)) {
+    s_use_celsius = persist_read_bool(1);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Loaded persisted s_use_celsius: %d", s_use_celsius);
+  }
+  
+  if (persist_exists(PERSIST_KEY_ALT_WEATHER_LAYOUT)) {
+    s_alt_weather_layout = persist_read_bool(PERSIST_KEY_ALT_WEATHER_LAYOUT);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Loaded persisted s_alt_weather_layout: %d", s_alt_weather_layout);
+  }
   
   // Create main window
   s_main_window = window_create();
