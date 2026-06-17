@@ -1043,7 +1043,12 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   }
   Tuple *cd_date = dict_find(iterator, MESSAGE_KEY_CountdownDate);
   if (cd_date) {
-    s_countdown_date = (int)cd_date->value->int32;
+    // Clay text inputs arrive as strings; extract digits into a YYYYMMDD int.
+    int v = 0;
+    for (const char *p = cd_date->value->cstring; *p && v < 100000000; p++) {
+      if (*p >= '0' && *p <= '9') v = v * 10 + (*p - '0');
+    }
+    s_countdown_date = v;
     persist_write_int(PERSIST_COUNTDOWN_DATE, s_countdown_date);
     update_countdown();
   }

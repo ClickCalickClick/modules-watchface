@@ -73,9 +73,21 @@ Options: (a) **vendor a patched clay** in-repo (`file:` dependency) — fully du
 clay fork. Until resolved, flint stays OUT of `targetPlatforms`. gabbro (2b) needs the same fix.
 **Decision: bundle flint enablement with the clay fix; not on the emery-3×3 critical path.**
 
+## Calendar data-source caveat
+PebbleKit JS cannot read the phone's calendar natively. The watch-side Calendar module is
+complete (renders `CalendarTitle`/`CalendarTime` sent via AppMessage), but a real data source
+(e.g. Google Calendar OAuth or a companion web service) is a **follow-up**. Until then the
+module shows "--".
+
 ## Status
-- [~] 2a.1 flint — BLOCKED on clay (see above); deferred to bundle with clay fix
-- [ ] 2a.1b per-platform grid config (emery 3×3 vs 2×2) — proceed (no clay dependency)
+- [x] 2a.1 flint enabled + clay swapped to @rebble/clay 1.0.10 (supports flint/gabbro)
+- [x] 2a.2 per-platform grid (emery 3×3, others 2×2) + cell model 4→9 + persistence loops
+- [x] 2a.3 five new module types (TZ, Week, Countdown, Distance, Calendar*)
+- [x] 2a.4 cell-size-aware fonts
+- [x] 2a.5 Clay settings (9 cells + module options + TZ/countdown/distance)
+- [x] 2a.6 emery 3×3 + basalt 2×2 verified in emulator; all 5 platforms build
+- [ ] Calendar real data source (follow-up — see caveat above)
+- [ ] 2b gabbro bespoke round renderer
 - [ ] 2a.2 cell model 4→9 + persistence
 - [ ] 2a.3 five new module types (render/layout/update)
 - [ ] 2a.4 cell-size-aware fonts
