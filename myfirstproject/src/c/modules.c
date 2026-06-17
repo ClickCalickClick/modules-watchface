@@ -12,6 +12,16 @@ typedef enum {
   MODULE_STATS = 4
 } ModuleType;
 
+// Grid dimensions. Phase 1 is a 2x2 grid on every platform; these constants are
+// the single place a future emery-only 3x3 grid would change (see plan Phase 2).
+#define GRID_COLS 2
+#define GRID_ROWS 2
+#define NUM_CELLS (GRID_COLS * GRID_ROWS)
+
+// Base coordinate space the *_LAYOUTS templates are authored in (one 144x168 quadrant).
+#define BASE_QUAD_W 72
+#define BASE_QUAD_H 84
+
 // Persistence keys
 #define PERSIST_KEY_Q1_MODULE 100
 #define PERSIST_KEY_Q2_MODULE 101
@@ -107,13 +117,70 @@ static bool s_auto_text_color[4] = {
 // Custom text color for each quadrant (when auto is disabled)
 static GColor s_custom_text_color[4];
 
-// Quadrant origins (x, y)
-static const GPoint QUADRANT_ORIGINS[4] = {
-  {0, 0},     // Q1 - Top Left
-  {72, 0},    // Q2 - Top Right
-  {0, 84},    // Q3 - Bottom Left
-  {72, 84}    // Q4 - Bottom Right
-};
+// Runtime screen geometry, computed once from the actual display bounds so the
+// layout adapts to any platform (e.g. emery 200x228) instead of static 144x168.
+static int16_t s_screen_w, s_screen_h, s_quad_w, s_quad_h;
+static GPoint s_quadrant_origins[NUM_CELLS];
+
+static void compute_screen_geometry(Window *window) {
+  GRect b = layer_get_bounds(window_get_root_layer(window));
+  s_screen_w = b.size.w;
+  s_screen_h = b.size.h;
+  s_quad_w = s_screen_w / GRID_COLS;
+  s_quad_h = s_screen_h / GRID_ROWS;
+  for (int i = 0; i < NUM_CELLS; i++) {
+    s_quadrant_origins[i] = GPoint((i % GRID_COLS) * s_quad_w, (i / GRID_COLS) * s_quad_h);
+  }
+}
+
+// Scale a base-coordinate GRect (authored for BASE_QUAD_W x BASE_QUAD_H) to the
+// actual quadrant size, then translate by the quadrant origin. Integer
+// multiply-before-divide keeps precision without floats.
+static GRect scale_layout(GRect base, GPoint origin) {
+  return GRect(
+    origin.x + (base.origin.x * s_quad_w) / BASE_QUAD_W,
+    origin.y + (base.origin.y * s_quad_h) / BASE_QUAD_H,
+    (base.size.w * s_quad_w) / BASE_QUAD_W,
+    (base.size.h * s_quad_h) / BASE_QUAD_H);
+}
+
+// Position a bitmap icon within the scaled quadrant. bitmap_layer does not upscale
+// image data, so the layer is sized to the loaded bitmap's native pixels (the SDK
+// selects a larger ~emery asset automatically); only the position is scaled.
+static GRect place_icon(GRect base, GPoint origin, GBitmap *bmp, bool center_x) {
+  GRect scaled = scale_layout(base, origin);
+  if (bmp) {
+    GSize sz = gbitmap_get_bounds(bmp).size;
+    scaled.size = sz;
+    if (center_x) {
+      scaled.origin.x = origin.x + (s_quad_w - sz.w) / 2;
+    }
+  }
+  return scaled;
+}
+
+// Per-platform font selection. Larger screens (emery, >=200px wide) use bigger
+// system fonts for each role. System fonts are discrete, so the largest roles
+// (VALUE_LG/HERO) are already at the system maximum and cannot grow further.
+typedef enum {
+  ROLE_LABEL_SM,
+  ROLE_LABEL_MD,
+  ROLE_VALUE_MD,
+  ROLE_VALUE_LG,
+  ROLE_HERO,
+} FontRole;
+
+static GFont sysfont(FontRole role) {
+  bool big = (s_screen_w >= 200);
+  switch (role) {
+    case ROLE_LABEL_SM: return fonts_get_system_font(big ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_14);
+    case ROLE_LABEL_MD: return fonts_get_system_font(big ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD);
+    case ROLE_VALUE_MD: return fonts_get_system_font(big ? FONT_KEY_GOTHIC_28_BOLD : FONT_KEY_GOTHIC_24_BOLD);
+    case ROLE_VALUE_LG: return fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD);  // gothic max
+    case ROLE_HERO:     return fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD);  // largest system font
+  }
+  return fonts_get_system_font(FONT_KEY_GOTHIC_14);
+}
 
 #ifdef PBL_COLOR
 static inline uint8_t prv_expand_component(uint8_t value) {
@@ -190,10 +257,10 @@ static const GRect STATS_LAYOUTS[5] = {
 // Background layer update procedure
 static void background_layer_update_proc(Layer *layer, GContext *ctx) {
   // Fill quadrant backgrounds based on settings
-  for (int q = 0; q < 4; q++) {
-    GPoint origin = QUADRANT_ORIGINS[q];
+  for (int q = 0; q < NUM_CELLS; q++) {
+    GPoint origin = s_quadrant_origins[q];
     GColor color;
-    
+
 #ifdef PBL_COLOR
     // On color platforms, use custom color if background is enabled
     color = s_quadrant_backgrounds[q] ? s_quadrant_colors[q] : GColorWhite;
@@ -201,26 +268,34 @@ static void background_layer_update_proc(Layer *layer, GContext *ctx) {
     // On B&W platforms, use light gray or white
     color = s_quadrant_backgrounds[q] ? GColorLightGray : GColorWhite;
 #endif
-    
+
+    // Fill the right column / bottom row to the screen edge to avoid seams on
+    // displays whose dimensions don't divide evenly by the grid.
+    int16_t w = (origin.x + s_quad_w >= s_screen_w) ? (s_screen_w - origin.x) : s_quad_w;
+    int16_t h = (origin.y + s_quad_h >= s_screen_h) ? (s_screen_h - origin.y) : s_quad_h;
     graphics_context_set_fill_color(ctx, color);
-    graphics_fill_rect(ctx, GRect(origin.x, origin.y, 72, 84), 0, GCornerNone);
+    graphics_fill_rect(ctx, GRect(origin.x, origin.y, w, h), 0, GCornerNone);
   }
-  
+
   // Draw grid lines
   graphics_context_set_stroke_color(ctx, GColorBlack);
   graphics_context_set_stroke_width(ctx, 1);
-  
-  // Vertical line at x=72
-  graphics_draw_line(ctx, GPoint(72, 0), GPoint(72, 168));
-  
-  // Horizontal line at y=84
-  graphics_draw_line(ctx, GPoint(0, 84), GPoint(144, 84));
+
+  // Vertical center line
+  graphics_draw_line(ctx, GPoint(s_quad_w, 0), GPoint(s_quad_w, s_screen_h));
+
+  // Horizontal center line
+  graphics_draw_line(ctx, GPoint(0, s_quad_h), GPoint(s_screen_w, s_quad_h));
 }
 
 // Divider layer for Q4
 static void divider_layer_update_proc(Layer *layer, GContext *ctx) {
   graphics_context_set_stroke_color(ctx, GColorBlack);
-  graphics_draw_line(ctx, GPoint(6, 32), GPoint(66, 32)); // Relative to layer position
+  // Scale the base (6,32)->(66,32) line (authored in BASE_QUAD space) to the quadrant.
+  int16_t x0 = (6 * s_quad_w) / BASE_QUAD_W;
+  int16_t x1 = (66 * s_quad_w) / BASE_QUAD_W;
+  int16_t y = (32 * s_quad_h) / BASE_QUAD_H;
+  graphics_draw_line(ctx, GPoint(x0, y), GPoint(x1, y)); // Relative to layer position
 }
 
 // Update fonts based on platform and background state
@@ -295,67 +370,45 @@ static void update_text_colors() {
 
 // Reposition layers based on module assignments
 static void reposition_layers() {
-  for (int q = 0; q < 4; q++) {
-    GPoint origin = QUADRANT_ORIGINS[q];
+  for (int q = 0; q < NUM_CELLS; q++) {
+    GPoint origin = s_quadrant_origins[q];
     ModuleType module = s_quadrant_modules[q];
-    
+
     switch (module) {
       case MODULE_DATE:
-        layer_set_frame(text_layer_get_layer(s_day_name_layer), 
-          GRect(origin.x + DATE_LAYOUTS[0].origin.x, origin.y + DATE_LAYOUTS[0].origin.y,
-                DATE_LAYOUTS[0].size.w, DATE_LAYOUTS[0].size.h));
-        layer_set_frame(text_layer_get_layer(s_day_number_layer),
-          GRect(origin.x + DATE_LAYOUTS[1].origin.x, origin.y + DATE_LAYOUTS[1].origin.y,
-                DATE_LAYOUTS[1].size.w, DATE_LAYOUTS[1].size.h));
-        layer_set_frame(text_layer_get_layer(s_month_name_layer),
-          GRect(origin.x + DATE_LAYOUTS[2].origin.x, origin.y + DATE_LAYOUTS[2].origin.y,
-                DATE_LAYOUTS[2].size.w, DATE_LAYOUTS[2].size.h));
+        layer_set_frame(text_layer_get_layer(s_day_name_layer), scale_layout(DATE_LAYOUTS[0], origin));
+        layer_set_frame(text_layer_get_layer(s_day_number_layer), scale_layout(DATE_LAYOUTS[1], origin));
+        layer_set_frame(text_layer_get_layer(s_month_name_layer), scale_layout(DATE_LAYOUTS[2], origin));
         layer_set_hidden(text_layer_get_layer(s_day_name_layer), false);
         layer_set_hidden(text_layer_get_layer(s_day_number_layer), false);
         layer_set_hidden(text_layer_get_layer(s_month_name_layer), false);
         break;
-        
+
       case MODULE_WEATHER:
         layer_set_frame(bitmap_layer_get_layer(s_weather_icon_layer),
-          GRect(origin.x + WEATHER_LAYOUTS[0].origin.x, origin.y + WEATHER_LAYOUTS[0].origin.y,
-                WEATHER_LAYOUTS[0].size.w, WEATHER_LAYOUTS[0].size.h));
-        layer_set_frame(text_layer_get_layer(s_temperature_layer),
-          GRect(origin.x + WEATHER_LAYOUTS[1].origin.x, origin.y + WEATHER_LAYOUTS[1].origin.y,
-                WEATHER_LAYOUTS[1].size.w, WEATHER_LAYOUTS[1].size.h));
-        layer_set_frame(text_layer_get_layer(s_weather_condition_layer),
-          GRect(origin.x + WEATHER_LAYOUTS[2].origin.x, origin.y + WEATHER_LAYOUTS[2].origin.y,
-                WEATHER_LAYOUTS[2].size.w, WEATHER_LAYOUTS[2].size.h));
+          place_icon(WEATHER_LAYOUTS[0], origin, s_weather_icon, true));
+        layer_set_frame(text_layer_get_layer(s_temperature_layer), scale_layout(WEATHER_LAYOUTS[1], origin));
+        layer_set_frame(text_layer_get_layer(s_weather_condition_layer), scale_layout(WEATHER_LAYOUTS[2], origin));
         layer_set_hidden(bitmap_layer_get_layer(s_weather_icon_layer), false);
         layer_set_hidden(text_layer_get_layer(s_temperature_layer), false);
         layer_set_hidden(text_layer_get_layer(s_weather_condition_layer), false);
         break;
-        
+
       case MODULE_TIME:
-        layer_set_frame(text_layer_get_layer(s_hour_layer),
-          GRect(origin.x + TIME_LAYOUTS[0].origin.x, origin.y + TIME_LAYOUTS[0].origin.y,
-                TIME_LAYOUTS[0].size.w, TIME_LAYOUTS[0].size.h));
-        layer_set_frame(text_layer_get_layer(s_minute_layer),
-          GRect(origin.x + TIME_LAYOUTS[1].origin.x, origin.y + TIME_LAYOUTS[1].origin.y,
-                TIME_LAYOUTS[1].size.w, TIME_LAYOUTS[1].size.h));
+        layer_set_frame(text_layer_get_layer(s_hour_layer), scale_layout(TIME_LAYOUTS[0], origin));
+        layer_set_frame(text_layer_get_layer(s_minute_layer), scale_layout(TIME_LAYOUTS[1], origin));
         layer_set_hidden(text_layer_get_layer(s_hour_layer), false);
         layer_set_hidden(text_layer_get_layer(s_minute_layer), false);
         break;
-        
+
       case MODULE_STATS:
         layer_set_frame(bitmap_layer_get_layer(s_battery_icon_layer),
-          GRect(origin.x + STATS_LAYOUTS[0].origin.x, origin.y + STATS_LAYOUTS[0].origin.y,
-                STATS_LAYOUTS[0].size.w, STATS_LAYOUTS[0].size.h));
-        layer_set_frame(text_layer_get_layer(s_battery_text_layer),
-          GRect(origin.x + STATS_LAYOUTS[1].origin.x, origin.y + STATS_LAYOUTS[1].origin.y,
-                STATS_LAYOUTS[1].size.w, STATS_LAYOUTS[1].size.h));
-        layer_set_frame(text_layer_get_layer(s_steps_count_layer),
-          GRect(origin.x + STATS_LAYOUTS[2].origin.x, origin.y + STATS_LAYOUTS[2].origin.y,
-                STATS_LAYOUTS[2].size.w, STATS_LAYOUTS[2].size.h));
-        layer_set_frame(text_layer_get_layer(s_steps_label_layer),
-          GRect(origin.x + STATS_LAYOUTS[3].origin.x, origin.y + STATS_LAYOUTS[3].origin.y,
-                STATS_LAYOUTS[3].size.w, STATS_LAYOUTS[3].size.h));
+          place_icon(STATS_LAYOUTS[0], origin, s_battery_icon, false));
+        layer_set_frame(text_layer_get_layer(s_battery_text_layer), scale_layout(STATS_LAYOUTS[1], origin));
+        layer_set_frame(text_layer_get_layer(s_steps_count_layer), scale_layout(STATS_LAYOUTS[2], origin));
+        layer_set_frame(text_layer_get_layer(s_steps_label_layer), scale_layout(STATS_LAYOUTS[3], origin));
         layer_set_frame(s_divider_layer,
-          GRect(origin.x, origin.y, 72, 84));
+          GRect(origin.x, origin.y, s_quad_w, s_quad_h));
         layer_set_hidden(bitmap_layer_get_layer(s_battery_icon_layer), false);
         layer_set_hidden(text_layer_get_layer(s_battery_text_layer), false);
         layer_set_hidden(text_layer_get_layer(s_steps_count_layer), false);
@@ -372,7 +425,7 @@ static void reposition_layers() {
   
   // Hide layers not assigned to any quadrant
   bool date_assigned = false, weather_assigned = false, time_assigned = false, stats_assigned = false;
-  for (int q = 0; q < 4; q++) {
+  for (int q = 0; q < NUM_CELLS; q++) {
     if (s_quadrant_modules[q] == MODULE_DATE) date_assigned = true;
     if (s_quadrant_modules[q] == MODULE_WEATHER) weather_assigned = true;
     if (s_quadrant_modules[q] == MODULE_TIME) time_assigned = true;
@@ -895,10 +948,13 @@ static void outbox_sent_callback(DictionaryIterator *iterator, void *context) {
 // Main window load
 static void main_window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
-  // GRect bounds = layer_get_bounds(window_layer);
-  
-  // Create background layer
-  s_background_layer = layer_create(GRect(0, 0, 144, 168));
+
+  // Compute screen geometry first: every layer size/position and font choice below
+  // depends on it (must run before background layer, sysfont(), and reposition_layers).
+  compute_screen_geometry(window);
+
+  // Create background layer (full screen)
+  s_background_layer = layer_create(GRect(0, 0, s_screen_w, s_screen_h));
   layer_set_update_proc(s_background_layer, background_layer_update_proc);
   layer_add_child(window_layer, s_background_layer);
   
@@ -906,21 +962,21 @@ static void main_window_load(Window *window) {
   s_day_name_layer = text_layer_create(GRect(0, 3, 72, 14));
   text_layer_set_background_color(s_day_name_layer, GColorClear);
   text_layer_set_text_color(s_day_name_layer, GColorBlack);
-  text_layer_set_font(s_day_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_font(s_day_name_layer, sysfont(ROLE_LABEL_SM));
   text_layer_set_text_alignment(s_day_name_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_day_name_layer));
   
   s_day_number_layer = text_layer_create(GRect(0, 15, 72, 51));
   text_layer_set_background_color(s_day_number_layer, GColorClear);
   text_layer_set_text_color(s_day_number_layer, GColorBlack);
-  text_layer_set_font(s_day_number_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD));
+  text_layer_set_font(s_day_number_layer, sysfont(ROLE_HERO));
   text_layer_set_text_alignment(s_day_number_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_day_number_layer));
   
   s_month_name_layer = text_layer_create(GRect(0, 62, 72, 71));
   text_layer_set_background_color(s_month_name_layer, GColorClear);
   text_layer_set_text_color(s_month_name_layer, GColorBlack);
-  text_layer_set_font(s_month_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_font(s_month_name_layer, sysfont(ROLE_LABEL_SM));
   text_layer_set_text_alignment(s_month_name_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_month_name_layer));
   
@@ -935,14 +991,14 @@ static void main_window_load(Window *window) {
   s_temperature_layer = text_layer_create(GRect(72, 30, 72, 54));
   text_layer_set_background_color(s_temperature_layer, GColorClear);
   text_layer_set_text_color(s_temperature_layer, GColorBlack);
-  text_layer_set_font(s_temperature_layer, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
+  text_layer_set_font(s_temperature_layer, sysfont(ROLE_VALUE_LG));
   text_layer_set_text_alignment(s_temperature_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_temperature_layer));
   
   s_weather_condition_layer = text_layer_create(GRect(72, 55, 72, 68));
   text_layer_set_background_color(s_weather_condition_layer, GColorClear);
   text_layer_set_text_color(s_weather_condition_layer, GColorBlack);
-  text_layer_set_font(s_weather_condition_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+  text_layer_set_font(s_weather_condition_layer, sysfont(ROLE_VALUE_MD));
   text_layer_set_text_alignment(s_weather_condition_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_weather_condition_layer));
   
@@ -950,14 +1006,14 @@ static void main_window_load(Window *window) {
   s_hour_layer = text_layer_create(GRect(0, 90, 72, 126));
   text_layer_set_background_color(s_hour_layer, GColorClear);
   text_layer_set_text_color(s_hour_layer, GColorBlack);
-  text_layer_set_font(s_hour_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD));
+  text_layer_set_font(s_hour_layer, sysfont(ROLE_HERO));
   text_layer_set_text_alignment(s_hour_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_hour_layer));
   
   s_minute_layer = text_layer_create(GRect(0, 128, 72, 164));
   text_layer_set_background_color(s_minute_layer, GColorClear);
   text_layer_set_text_color(s_minute_layer, GColorDarkGray);
-  text_layer_set_font(s_minute_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD));
+  text_layer_set_font(s_minute_layer, sysfont(ROLE_HERO));
   text_layer_set_text_alignment(s_minute_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_minute_layer));
   
@@ -972,26 +1028,26 @@ static void main_window_load(Window *window) {
   s_battery_text_layer = text_layer_create(GRect(104, 91, 40, 105));
   text_layer_set_background_color(s_battery_text_layer, GColorClear);
   text_layer_set_text_color(s_battery_text_layer, GColorBlack);
-  text_layer_set_font(s_battery_text_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  text_layer_set_font(s_battery_text_layer, sysfont(ROLE_LABEL_MD));
   text_layer_set_text_alignment(s_battery_text_layer, GTextAlignmentLeft);
   layer_add_child(window_layer, text_layer_get_layer(s_battery_text_layer));
   
-  // Divider line layer
-  s_divider_layer = layer_create(GRect(72, 84, 72, 84));
+  // Divider line layer (frame is set in reposition_layers; use Q4 cell as a sane default)
+  s_divider_layer = layer_create(GRect(s_quadrant_origins[3].x, s_quadrant_origins[3].y, s_quad_w, s_quad_h));
   layer_set_update_proc(s_divider_layer, divider_layer_update_proc);
   layer_add_child(window_layer, s_divider_layer);
   
   s_steps_count_layer = text_layer_create(GRect(72, 118, 72, 145));
   text_layer_set_background_color(s_steps_count_layer, GColorClear);
   text_layer_set_text_color(s_steps_count_layer, GColorBlack);
-  text_layer_set_font(s_steps_count_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+  text_layer_set_font(s_steps_count_layer, sysfont(ROLE_VALUE_MD));
   text_layer_set_text_alignment(s_steps_count_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_steps_count_layer));
   
   s_steps_label_layer = text_layer_create(GRect(72, 144, 72, 160));
   text_layer_set_background_color(s_steps_label_layer, GColorClear);
   text_layer_set_text_color(s_steps_label_layer, GColorBlack);
-  text_layer_set_font(s_steps_label_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_font(s_steps_label_layer, sysfont(ROLE_LABEL_SM));
   text_layer_set_text_alignment(s_steps_label_layer, GTextAlignmentCenter);
   text_layer_set_text(s_steps_label_layer, "STEPS");
   layer_add_child(window_layer, text_layer_get_layer(s_steps_label_layer));
