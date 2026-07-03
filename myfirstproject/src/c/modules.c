@@ -15,6 +15,19 @@ typedef enum {
   MODULE_COUNTDOWN = 7,  // Days until a target date
   MODULE_DISTANCE = 8,   // Distance walked today
   MODULE_CALENDAR = 9,   // Next calendar event (from phone)
+  // Phase 3c on-watch wave (data sourced entirely on the watch, no phone needed)
+  MODULE_BLUETOOTH = 10, // Bluetooth connection status
+  MODULE_HEARTRATE = 11, // Current heart rate (BPM)
+  MODULE_GOAL_RING = 12, // Step-goal progress ring (custom-draw)
+  MODULE_SLEEP = 13,     // Sleep duration today
+  MODULE_CALORIES = 14,  // Active + resting calories today
+  MODULE_ACTIVE = 15,    // Active minutes today
+  MODULE_MOON = 16,      // Moon phase
+  MODULE_DAY_OF_YEAR = 17, // Day-of-year (1..366)
+  MODULE_COUNTUP = 18,   // Days since a target date
+  MODULE_CUSTOM_TEXT = 19, // User-supplied custom text
+  MODULE_QUIET_TIME = 20,  // Quiet Time on/off
+  MODULE_MINI_CLOCK = 21,  // Analog mini-clock (custom-draw)
   NUM_MODULE_TYPES
 } ModuleType;
 
@@ -71,6 +84,11 @@ typedef enum {
 #define PERSIST_COUNTDOWN_DATE  152  // target date as YYYYMMDD int
 #define PERSIST_COUNTDOWN_LABEL 153  // short label string
 #define PERSIST_DIST_UNITS      154  // 0 = miles, 1 = km
+#define PERSIST_BT_VIBE         155  // 1 = vibrate on Bluetooth disconnect
+#define PERSIST_COUNTUP_DATE    156  // start date as YYYYMMDD int
+#define PERSIST_COUNTUP_LABEL   157  // short label string
+#define PERSIST_CUSTOM_TEXT     158  // custom text string
+#define PERSIST_STEP_GOAL       159  // daily step goal for the progress ring
 
 // UI Elements
 static Window *s_main_window;
@@ -98,6 +116,17 @@ static char s_cd_buffer[16];
 static char s_dist_buffer[20];
 static char s_cal_title_buffer[24] = "--";
 static char s_cal_time_buffer[12];
+// Phase 3c on-watch buffers
+static char s_bt_buffer[6] = "--";
+static char s_hr_buffer[6] = "--";
+static char s_sleep_buffer[8] = "--";
+static char s_calories_buffer[8] = "--";
+static char s_active_buffer[8] = "--";
+static char s_moon_buffer[8] = "--";
+static char s_doy_buffer[6] = "--";
+static char s_countup_buffer[16] = "--";
+static char s_quiet_buffer[6] = "--";
+static char s_custom_text[24] = "TEXT";
 
 // Settings
 static bool s_use_celsius = false;
@@ -158,6 +187,11 @@ static char s_tz_label[8] = "TZ2";
 static int s_countdown_date = 0;               // target as YYYYMMDD (0 = unset)
 static char s_countdown_label[10] = "EVENT";
 static bool s_dist_use_km = true;              // true = km, false = miles
+static bool s_bt_vibe = false;                 // vibrate on Bluetooth disconnect
+static int s_countup_date = 0;                 // start date as YYYYMMDD (0 = unset)
+static char s_countup_label[10] = "SINCE";
+static int s_step_goal = 10000;                // daily step goal for the ring
+static int s_step_count = 0;                   // today's steps (for the ring arc)
 
 // Runtime screen geometry, computed once from the actual display bounds so the
 // layout adapts to any platform (e.g. emery 200x228) instead of static 144x168.
@@ -298,6 +332,74 @@ static GColor get_text_color_for_quadrant(int quadrant) {
 }
 
 // ---------------------------------------------------------------------------
+// Custom-draw update procs. Modules that can't be expressed with TextLayers
+// point ModuleDef.custom_draw at one of these. The layer stores its cell index
+// as layer data (see cell_build_ui), so the proc can recover cell geometry,
+// per-cell text color, and read the shared data globals.
+// ---------------------------------------------------------------------------
+
+// Step-goal progress ring: a gray track with a foreground arc for progress.
+static void goal_ring_update_proc(Layer *layer, GContext *ctx) {
+  int cell = *(int *)layer_get_data(layer);
+  GRect b = layer_get_bounds(layer);
+  GPoint center = GPoint(b.size.w / 2, b.size.h / 2);
+  int16_t outer = (b.size.w < b.size.h ? b.size.w : b.size.h) / 2 - 2;
+  int16_t thick = outer / 5;
+  if (thick < 3) thick = 3;
+  GRect box = GRect(center.x - outer, center.y - outer, outer * 2, outer * 2);
+
+  // Track in dark gray so it contrasts on white and light-gray cell backgrounds.
+  graphics_context_set_fill_color(ctx, GColorDarkGray);
+  graphics_fill_radial(ctx, box, GOvalScaleModeFitCircle, thick, 0, TRIG_MAX_ANGLE);
+
+  int pct = s_step_goal > 0 ? (s_step_count * 100 / s_step_goal) : 0;
+  if (pct > 100) pct = 100;
+  int32_t end = (TRIG_MAX_ANGLE * pct) / 100;
+  graphics_context_set_fill_color(ctx, get_text_color_for_quadrant(cell));
+  graphics_fill_radial(ctx, box, GOvalScaleModeFitCircle, thick, 0, end);
+}
+
+// Analog mini-clock: face outline, hour ticks, and hour/minute hands.
+static void mini_clock_update_proc(Layer *layer, GContext *ctx) {
+  int cell = *(int *)layer_get_data(layer);
+  GRect b = layer_get_bounds(layer);
+  GColor fg = get_text_color_for_quadrant(cell);
+  GPoint center = GPoint(b.size.w / 2, b.size.h / 2);
+  int16_t r = (b.size.w < b.size.h ? b.size.w : b.size.h) / 2 - 2;
+
+  graphics_context_set_stroke_color(ctx, fg);
+  graphics_context_set_stroke_width(ctx, 1);
+  graphics_draw_circle(ctx, center, r);
+
+  // Hour ticks (12 o'clock is straight up; angle grows clockwise).
+  for (int i = 0; i < 12; i++) {
+    int32_t a = TRIG_MAX_ANGLE * i / 12;
+    int16_t sx = center.x + (int16_t)((r - 3) * sin_lookup(a) / TRIG_MAX_RATIO);
+    int16_t sy = center.y - (int16_t)((r - 3) * cos_lookup(a) / TRIG_MAX_RATIO);
+    int16_t ex = center.x + (int16_t)(r * sin_lookup(a) / TRIG_MAX_RATIO);
+    int16_t ey = center.y - (int16_t)(r * cos_lookup(a) / TRIG_MAX_RATIO);
+    graphics_draw_line(ctx, GPoint(sx, sy), GPoint(ex, ey));
+  }
+
+  time_t now = time(NULL);
+  struct tm *t = localtime(&now);
+  int32_t min_angle = TRIG_MAX_ANGLE * t->tm_min / 60;
+  int32_t hour_angle = TRIG_MAX_ANGLE * ((t->tm_hour % 12) * 60 + t->tm_min) / 720;
+
+  int16_t hr_len = r / 2;
+  graphics_context_set_stroke_width(ctx, 3);
+  graphics_draw_line(ctx, center, GPoint(
+    center.x + (int16_t)(hr_len * sin_lookup(hour_angle) / TRIG_MAX_RATIO),
+    center.y - (int16_t)(hr_len * cos_lookup(hour_angle) / TRIG_MAX_RATIO)));
+
+  int16_t min_len = r - 4;
+  graphics_context_set_stroke_width(ctx, 2);
+  graphics_draw_line(ctx, center, GPoint(
+    center.x + (int16_t)(min_len * sin_lookup(min_angle) / TRIG_MAX_RATIO),
+    center.y - (int16_t)(min_len * cos_lookup(min_angle) / TRIG_MAX_RATIO)));
+}
+
+// ---------------------------------------------------------------------------
 // Module registry: one descriptor per module type. Each cell displaying a
 // module gets its own lazily-created layers, positioned from these templates
 // (authored in BASE_QUAD space) and fed from the shared data buffers.
@@ -321,6 +423,13 @@ typedef struct {
   GRect icon_frame;       // BASE_QUAD space
   bool icon_center_x;
   bool has_divider;       // horizontal rule (Stats)
+  // Optional custom drawing: modules whose visuals can't be expressed as
+  // TextLayers (progress ring, analog clock) set custom_draw. A dedicated Layer
+  // is created at custom_frame (BASE_QUAD space; {0,0} size falls back to the
+  // whole cell) and this proc is invoked to paint it. The proc recovers its cell
+  // index from the layer's data (see cell_build_ui) to read geometry + data.
+  void (*custom_draw)(Layer *layer, GContext *ctx);
+  GRect custom_frame;     // BASE_QUAD space; zero size => full cell
 } ModuleDef;
 
 static const ModuleDef MODULE_DEFS[NUM_MODULE_TYPES] = {
@@ -397,6 +506,88 @@ static const ModuleDef MODULE_DEFS[NUM_MODULE_TYPES] = {
       {{{0, 54}, {72, 80}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, s_cal_time_buffer},
     },
   },
+  // --- Phase 3c on-watch modules ---
+  [MODULE_BLUETOOTH] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "BLUETOOTH"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_bt_buffer},
+    },
+  },
+  [MODULE_HEARTRATE] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "HEART"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_hr_buffer},
+    },
+  },
+  [MODULE_SLEEP] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "SLEEP"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_sleep_buffer},
+    },
+  },
+  [MODULE_CALORIES] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "CAL"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_calories_buffer},
+    },
+  },
+  [MODULE_ACTIVE] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "ACTIVE"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_active_buffer},
+    },
+  },
+  [MODULE_MOON] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "MOON"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_moon_buffer},
+    },
+  },
+  [MODULE_DAY_OF_YEAR] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "DAY"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_doy_buffer},
+    },
+  },
+  [MODULE_COUNTUP] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, s_countup_label},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_countup_buffer},
+    },
+  },
+  [MODULE_CUSTOM_TEXT] = {
+    .num_texts = 1,
+    .texts = {
+      {{{2, 24}, {68, 78}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_custom_text},
+    },
+  },
+  [MODULE_QUIET_TIME] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "QUIET"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_quiet_buffer},
+    },
+  },
+  [MODULE_GOAL_RING] = {
+    // Progress ring (custom-draw) with the step count centered inside it.
+    .num_texts = 1,
+    .texts = {
+      {{{0, 32}, {72, 56}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_steps_buffer},
+    },
+    .custom_draw = goal_ring_update_proc,
+  },
+  [MODULE_MINI_CLOCK] = {
+    .num_texts = 0,
+    .custom_draw = mini_clock_update_proc,
+  },
 };
 
 #ifdef ROUND_LAYOUT
@@ -469,6 +660,88 @@ static const ModuleDef MODULE_PODS[NUM_MODULE_TYPES] = {
       {{{0, 46}, {72, 80}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, s_cal_time_buffer},
     },
   },
+  // --- Phase 3c on-watch modules (compact ring-pod form) ---
+  [MODULE_BLUETOOTH] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 26}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "BT"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_bt_buffer},
+    },
+  },
+  [MODULE_HEARTRATE] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 26}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "HR"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_hr_buffer},
+    },
+  },
+  [MODULE_SLEEP] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 26}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "SLEEP"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_sleep_buffer},
+    },
+  },
+  [MODULE_CALORIES] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 26}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "CAL"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_calories_buffer},
+    },
+  },
+  [MODULE_ACTIVE] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 26}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "ACTIVE"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_active_buffer},
+    },
+  },
+  [MODULE_MOON] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 26}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "MOON"},
+      {{{0, 28}, {72, 80}}, ROLE_LABEL_MD, ROLE_LABEL_MD, GTextAlignmentCenter, s_moon_buffer},
+    },
+  },
+  [MODULE_DAY_OF_YEAR] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 26}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "DAY"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_doy_buffer},
+    },
+  },
+  [MODULE_COUNTUP] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 26}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, s_countup_label},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_countup_buffer},
+    },
+  },
+  [MODULE_CUSTOM_TEXT] = {
+    .num_texts = 1,
+    .texts = {
+      {{{2, 20}, {68, 78}}, ROLE_LABEL_MD, ROLE_LABEL_MD, GTextAlignmentCenter, s_custom_text},
+    },
+  },
+  [MODULE_QUIET_TIME] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 26}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "QUIET"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_quiet_buffer},
+    },
+  },
+  [MODULE_GOAL_RING] = {
+    // Compact ring keeps the arc; step count shrinks to a small centered label.
+    .num_texts = 1,
+    .texts = {
+      {{{0, 32}, {72, 52}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, s_steps_buffer},
+    },
+    .custom_draw = goal_ring_update_proc,
+  },
+  [MODULE_MINI_CLOCK] = {
+    .num_texts = 0,
+    .custom_draw = mini_clock_update_proc,
+  },
 };
 #endif
 
@@ -488,6 +761,7 @@ typedef struct {
   TextLayer *text[MAX_TEXT_PARTS];
   BitmapLayer *icon;
   Layer *divider;
+  Layer *custom;   // optional custom-draw layer (progress ring, mini-clock)
 } CellUI;
 static CellUI s_cell_ui[MAX_CELLS];
 
@@ -498,10 +772,23 @@ static ModuleType sanitize_module(int value) {
 // Background layer update procedure
 static void background_layer_update_proc(Layer *layer, GContext *ctx) {
 #ifdef ROUND_LAYOUT
-  // Round: plain white field with a subtle outline around the center pod. Per-cell
-  // background colors don't apply on round (pods are text over the white field).
+  // Round: white field, then a rounded background "chip" behind each pod whose
+  // background is enabled (center pod gets a larger corner radius than the ring
+  // pods). Pods without a background stay on the white field.
   graphics_context_set_fill_color(ctx, GColorWhite);
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
+
+  for (int q = 0; q < NUM_CELLS; q++) {
+    if (!s_quadrant_backgrounds[q]) continue;
+#ifdef PBL_COLOR
+    graphics_context_set_fill_color(ctx, s_quadrant_colors[q]);
+#else
+    graphics_context_set_fill_color(ctx, GColorLightGray);
+#endif
+    graphics_fill_rect(ctx, s_cell_frame[q], (q == 0) ? 10 : 6, GCornersAll);
+  }
+
+  // Subtle outline around the center pod for a consistent focal point.
   graphics_context_set_stroke_color(ctx, GColorLightGray);
   graphics_context_set_stroke_width(ctx, 1);
   graphics_draw_round_rect(ctx, s_cell_frame[0], 10);
@@ -579,6 +866,10 @@ static void cell_render(int cell) {
     layer_set_frame(bitmap_layer_get_layer(ui->icon),
       place_icon(def->icon_frame, cell, *def->icon, def->icon_center_x));
   }
+  // Custom-draw modules repaint on every data push (steps/goal, time).
+  if (ui->custom) {
+    layer_mark_dirty(ui->custom);
+  }
 }
 
 // Destroy a cell's layers (safe on an already-empty cell).
@@ -598,6 +889,10 @@ static void cell_destroy_ui(int cell) {
     layer_destroy(ui->divider);
     ui->divider = NULL;
   }
+  if (ui->custom) {
+    layer_destroy(ui->custom);
+    ui->custom = NULL;
+  }
 }
 
 // (Re)build a cell's layers for its currently assigned module, then render it.
@@ -606,6 +901,18 @@ static void cell_build_ui(int cell) {
 
   const ModuleDef *def = def_for_cell(cell);
   CellUI *ui = &s_cell_ui[cell];
+
+  // Custom-draw layer (added first so TextLayers render on top of it). The layer
+  // stores its cell index as data so the update proc can recover geometry/color.
+  if (def->custom_draw) {
+    GRect frame = (def->custom_frame.size.w == 0 && def->custom_frame.size.h == 0)
+      ? s_cell_frame[cell] : scale_layout(def->custom_frame, cell);
+    Layer *cl = layer_create_with_data(frame, sizeof(int));
+    *(int *)layer_get_data(cl) = cell;
+    layer_set_update_proc(cl, def->custom_draw);
+    layer_add_child(s_window_layer, cl);
+    ui->custom = cl;
+  }
 
   for (int i = 0; i < def->num_texts; i++) {
     const TextPart *part = &def->texts[i];
@@ -678,6 +985,7 @@ static void update_time() {
 
   render_module(MODULE_TIME);
   render_module(MODULE_DATE);
+  render_module(MODULE_MINI_CLOCK);
 }
 
 // Second time zone (offset from local wall-clock time)
@@ -740,6 +1048,126 @@ static void update_distance() {
   render_module(MODULE_DISTANCE);
 }
 
+// Sum a cumulative Health metric over today, or -1 if it isn't available.
+static int health_sum_today(HealthMetric metric) {
+  time_t start = time_start_of_today();
+  time_t end = time(NULL);
+  if (health_service_metric_accessible(metric, start, end) & HealthServiceAccessibilityMaskAvailable) {
+    return (int)health_service_sum_today(metric);
+  }
+  return -1;
+}
+
+// Bluetooth connection status
+static void update_bluetooth() {
+  bool connected = connection_service_peek_pebble_app_connection();
+  snprintf(s_bt_buffer, sizeof(s_bt_buffer), "%s", connected ? "OK" : "OFF");
+  render_module(MODULE_BLUETOOTH);
+}
+
+// Heart rate (Health API); current BPM, not a daily sum
+static void update_heartrate() {
+  time_t start = time_start_of_today();
+  time_t end = time(NULL);
+  if (health_service_metric_accessible(HealthMetricHeartRateBPM, start, end)
+        & HealthServiceAccessibilityMaskAvailable) {
+    HealthValue v = health_service_peek_current_value(HealthMetricHeartRateBPM);
+    if (v > 0) snprintf(s_hr_buffer, sizeof(s_hr_buffer), "%d", (int)v);
+    else snprintf(s_hr_buffer, sizeof(s_hr_buffer), "--");
+  } else {
+    snprintf(s_hr_buffer, sizeof(s_hr_buffer), "--");
+  }
+  render_module(MODULE_HEARTRATE);
+}
+
+// Sleep duration today (hours, one decimal)
+static void update_sleep() {
+  int secs = health_sum_today(HealthMetricSleepSeconds);
+  if (secs < 0) {
+    snprintf(s_sleep_buffer, sizeof(s_sleep_buffer), "--");
+  } else {
+    int tenths = secs * 10 / 3600;  // integer math, no float printf
+    snprintf(s_sleep_buffer, sizeof(s_sleep_buffer), "%d.%dh", tenths / 10, tenths % 10);
+  }
+  render_module(MODULE_SLEEP);
+}
+
+// Calories today (active + resting kcal)
+static void update_calories() {
+  int active = health_sum_today(HealthMetricActiveKCalories);
+  int resting = health_sum_today(HealthMetricRestingKCalories);
+  if (active < 0 && resting < 0) {
+    snprintf(s_calories_buffer, sizeof(s_calories_buffer), "--");
+  } else {
+    int total = (active < 0 ? 0 : active) + (resting < 0 ? 0 : resting);
+    snprintf(s_calories_buffer, sizeof(s_calories_buffer), "%d", total);
+  }
+  render_module(MODULE_CALORIES);
+}
+
+// Active minutes today
+static void update_active() {
+  int secs = health_sum_today(HealthMetricActiveSeconds);
+  if (secs < 0) {
+    snprintf(s_active_buffer, sizeof(s_active_buffer), "--");
+  } else {
+    snprintf(s_active_buffer, sizeof(s_active_buffer), "%dm", secs / 60);
+  }
+  render_module(MODULE_ACTIVE);
+}
+
+// Moon phase, computed from the synodic month since a known new moon.
+static void update_moon() {
+  const long PERIOD = 2551443;   // synodic month in seconds (29.530589 days)
+  const long REF    = 947182440; // 2000-01-06 18:14 UTC new moon (unix seconds)
+  long age = ((long)time(NULL) - REF) % PERIOD;
+  if (age < 0) age += PERIOD;
+  int idx = (int)(((long long)age * 8 + PERIOD / 2) / PERIOD) % 8;
+  static const char *const names[8] = {
+    "NEW", "WAX", "1QTR", "WAX+", "FULL", "WAN+", "3QTR", "WAN"
+  };
+  snprintf(s_moon_buffer, sizeof(s_moon_buffer), "%s", names[idx]);
+  render_module(MODULE_MOON);
+}
+
+// Day of year (1..366)
+static void update_day_of_year() {
+  time_t now = time(NULL);
+  struct tm *t = localtime(&now);
+  strftime(s_doy_buffer, sizeof(s_doy_buffer), "%j", t);
+  // Strip leading zeros (%j is zero-padded to 3 digits)
+  while (s_doy_buffer[0] == '0' && s_doy_buffer[1] != '\0') {
+    memmove(s_doy_buffer, s_doy_buffer + 1, strlen(s_doy_buffer));
+  }
+  render_module(MODULE_DAY_OF_YEAR);
+}
+
+// Count-up: days elapsed since the target date (YYYYMMDD)
+static void update_countup() {
+  if (s_countup_date <= 0) {
+    snprintf(s_countup_buffer, sizeof(s_countup_buffer), "--");
+  } else {
+    struct tm tt = {0};
+    tt.tm_year = (s_countup_date / 10000) - 1900;
+    tt.tm_mon  = ((s_countup_date / 100) % 100) - 1;
+    tt.tm_mday = s_countup_date % 100;
+    tt.tm_hour = 12;
+    time_t target = mktime(&tt);
+    int days = (int)((time(NULL) - target) / 86400);
+    if (days < 0) days = 0;
+    if (days == 0) snprintf(s_countup_buffer, sizeof(s_countup_buffer), "TODAY");
+    else snprintf(s_countup_buffer, sizeof(s_countup_buffer), "%dd", days);
+  }
+  render_module(MODULE_COUNTUP);
+}
+
+// Quiet Time status
+static void update_quiet_time() {
+  snprintf(s_quiet_buffer, sizeof(s_quiet_buffer), "%s",
+           quiet_time_is_active() ? "ON" : "OFF");
+  render_module(MODULE_QUIET_TIME);
+}
+
 static void update_battery() {
   BatteryChargeState battery_state = battery_state_service_peek();
   snprintf(s_battery_buffer, sizeof(s_battery_buffer), "%d%%", battery_state.charge_percent);
@@ -773,17 +1201,34 @@ static void update_steps() {
 
   if (mask & HealthServiceAccessibilityMaskAvailable) {
     int steps = (int)health_service_sum_today(metric);
+    s_step_count = steps;
     snprintf(s_steps_buffer, sizeof(s_steps_buffer), "%d", steps);
   } else {
+    s_step_count = 0;
     snprintf(s_steps_buffer, sizeof(s_steps_buffer), "--");
   }
   render_module(MODULE_STATS);
+  render_module(MODULE_GOAL_RING);
 }
 
 static void health_handler(HealthEventType event, void *context) {
   if (event == HealthEventSignificantUpdate || event == HealthEventMovementUpdate) {
     update_steps();
     update_distance();
+    update_sleep();
+    update_calories();
+    update_active();
+  }
+  if (event == HealthEventHeartRateUpdate || event == HealthEventSignificantUpdate) {
+    update_heartrate();
+  }
+}
+
+// Bluetooth connection changes; optionally buzz on disconnect.
+static void bluetooth_handler(bool connected) {
+  update_bluetooth();
+  if (!connected && s_bt_vibe) {
+    vibes_double_pulse();
   }
 }
 
@@ -847,6 +1292,10 @@ static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   update_tz();
   update_week();
   update_countdown();
+  update_countup();
+  update_day_of_year();
+  update_moon();
+  update_quiet_time();
 
   // Request a weather refresh from the phone every 30 minutes
   if (tick_time->tm_min % 30 == 0) {
@@ -1026,6 +1475,48 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
     persist_write_int(PERSIST_DIST_UNITS, s_dist_use_km ? 1 : 0);
     update_distance();
   }
+  Tuple *bt_vibe = dict_find(iterator, MESSAGE_KEY_BluetoothVibe);
+  if (bt_vibe) {
+    s_bt_vibe = (bt_vibe->value->int32 == 1);
+    persist_write_bool(PERSIST_BT_VIBE, s_bt_vibe);
+  }
+  Tuple *cu_date = dict_find(iterator, MESSAGE_KEY_CountupDate);
+  if (cu_date) {
+    int v = 0;
+    for (const char *p = cu_date->value->cstring; *p && v < 100000000; p++) {
+      if (*p >= '0' && *p <= '9') v = v * 10 + (*p - '0');
+    }
+    s_countup_date = v;
+    persist_write_int(PERSIST_COUNTUP_DATE, s_countup_date);
+    update_countup();
+  }
+  Tuple *cu_lbl = dict_find(iterator, MESSAGE_KEY_CountupLabel);
+  if (cu_lbl) {
+    strncpy(s_countup_label, cu_lbl->value->cstring, sizeof(s_countup_label) - 1);
+    s_countup_label[sizeof(s_countup_label) - 1] = '\0';
+    persist_write_string(PERSIST_COUNTUP_LABEL, s_countup_label);
+    render_module(MODULE_COUNTUP);
+  }
+  Tuple *ctext = dict_find(iterator, MESSAGE_KEY_CustomText);
+  if (ctext) {
+    strncpy(s_custom_text, ctext->value->cstring, sizeof(s_custom_text) - 1);
+    s_custom_text[sizeof(s_custom_text) - 1] = '\0';
+    persist_write_string(PERSIST_CUSTOM_TEXT, s_custom_text);
+    render_module(MODULE_CUSTOM_TEXT);
+  }
+  Tuple *sgoal = dict_find(iterator, MESSAGE_KEY_StepGoal);
+  if (sgoal) {
+    // Clay text inputs arrive as strings; extract digits into an int.
+    int g = 0;
+    for (const char *p = sgoal->value->cstring; *p && g < 1000000; p++) {
+      if (*p >= '0' && *p <= '9') g = g * 10 + (*p - '0');
+    }
+    if (g > 0) {
+      s_step_goal = g;
+      persist_write_int(PERSIST_STEP_GOAL, s_step_goal);
+      render_module(MODULE_GOAL_RING);
+    }
+  }
   Tuple *cal_title = dict_find(iterator, MESSAGE_KEY_CalendarTitle);
   if (cal_title) {
     strncpy(s_cal_title_buffer, cal_title->value->cstring, sizeof(s_cal_title_buffer) - 1);
@@ -1088,6 +1579,15 @@ static void main_window_load(Window *window) {
   update_week();
   update_countdown();
   update_distance();
+  update_bluetooth();
+  update_heartrate();
+  update_sleep();
+  update_calories();
+  update_active();
+  update_moon();
+  update_day_of_year();
+  update_countup();
+  update_quiet_time();
 
   s_window_layer = window_get_root_layer(window);
   for (int i = 0; i < NUM_CELLS; i++) {
@@ -1141,6 +1641,11 @@ static void init() {
   if (persist_exists(PERSIST_COUNTDOWN_DATE)) s_countdown_date = persist_read_int(PERSIST_COUNTDOWN_DATE);
   if (persist_exists(PERSIST_COUNTDOWN_LABEL)) persist_read_string(PERSIST_COUNTDOWN_LABEL, s_countdown_label, sizeof(s_countdown_label));
   if (persist_exists(PERSIST_DIST_UNITS)) s_dist_use_km = (persist_read_int(PERSIST_DIST_UNITS) == 1);
+  if (persist_exists(PERSIST_BT_VIBE)) s_bt_vibe = persist_read_bool(PERSIST_BT_VIBE);
+  if (persist_exists(PERSIST_COUNTUP_DATE)) s_countup_date = persist_read_int(PERSIST_COUNTUP_DATE);
+  if (persist_exists(PERSIST_COUNTUP_LABEL)) persist_read_string(PERSIST_COUNTUP_LABEL, s_countup_label, sizeof(s_countup_label));
+  if (persist_exists(PERSIST_CUSTOM_TEXT)) persist_read_string(PERSIST_CUSTOM_TEXT, s_custom_text, sizeof(s_custom_text));
+  if (persist_exists(PERSIST_STEP_GOAL)) s_step_goal = persist_read_int(PERSIST_STEP_GOAL);
 
   // Create main window
   s_main_window = window_create();
@@ -1154,6 +1659,9 @@ static void init() {
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
   battery_state_service_subscribe(battery_callback);
   health_service_events_subscribe(health_handler, NULL);
+  connection_service_subscribe((ConnectionHandlers) {
+    .pebble_app_connection_handler = bluetooth_handler
+  });
 
   // Register AppMessage callbacks
   app_message_register_inbox_received(inbox_received_callback);
@@ -1165,6 +1673,7 @@ static void init() {
 // Deinit
 static void deinit() {
   health_service_events_unsubscribe();
+  connection_service_unsubscribe();
   window_destroy(s_main_window);
 }
 

@@ -11,7 +11,19 @@ var MODULE_OPTIONS = [
   { "label": "Week Number", "value": "6" },
   { "label": "Countdown", "value": "7" },
   { "label": "Distance", "value": "8" },
-  { "label": "Calendar (next event)", "value": "9" }
+  { "label": "Calendar (next event)", "value": "9" },
+  { "label": "Bluetooth Status", "value": "10" },
+  { "label": "Heart Rate", "value": "11" },
+  { "label": "Step Goal Ring", "value": "12" },
+  { "label": "Sleep", "value": "13" },
+  { "label": "Calories", "value": "14" },
+  { "label": "Active Minutes", "value": "15" },
+  { "label": "Moon Phase", "value": "16" },
+  { "label": "Day of Year", "value": "17" },
+  { "label": "Count-up (days since)", "value": "18" },
+  { "label": "Custom Text", "value": "19" },
+  { "label": "Quiet Time", "value": "20" },
+  { "label": "Analog Mini-clock", "value": "21" }
 ];
 
 // Default module per cell (1-indexed cell -> module value)
@@ -120,7 +132,18 @@ module.exports = [
       { "type": "input", "messageKey": "CountdownLabel", "label": "Countdown Label",
         "defaultValue": "EVENT", "attributes": { "placeholder": "e.g., TRIP", "maxlength": 8 } },
       { "type": "toggle", "messageKey": "DistanceUnits", "label": "Use Kilometers",
-        "description": "Distance in km instead of miles", "defaultValue": true }
+        "description": "Distance in km instead of miles", "defaultValue": true },
+      { "type": "toggle", "messageKey": "BluetoothVibe", "label": "Vibrate on Bluetooth Disconnect",
+        "description": "Buzz when the phone connection drops", "defaultValue": false },
+      { "type": "input", "messageKey": "CountupDate", "label": "Count-up Start Date",
+        "defaultValue": "", "attributes": { "placeholder": "YYYY-MM-DD", "type": "date" } },
+      { "type": "input", "messageKey": "CountupLabel", "label": "Count-up Label",
+        "defaultValue": "SINCE", "attributes": { "placeholder": "e.g., SOBER", "maxlength": 8 } },
+      { "type": "input", "messageKey": "CustomText", "label": "Custom Text",
+        "defaultValue": "", "attributes": { "placeholder": "e.g., HELLO", "maxlength": 20 } },
+      { "type": "input", "messageKey": "StepGoal", "label": "Daily Step Goal",
+        "description": "Target for the Step Goal Ring module", "defaultValue": "10000",
+        "attributes": { "placeholder": "10000", "type": "number" } }
     ]
   },
   {

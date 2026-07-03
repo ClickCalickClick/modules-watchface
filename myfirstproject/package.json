@@ -84,7 +84,12 @@
       "CountdownLabel",
       "DistanceUnits",
       "CalendarTitle",
-      "CalendarTime"
+      "CalendarTime",
+      "BluetoothVibe",
+      "CountupDate",
+      "CountupLabel",
+      "CustomText",
+      "StepGoal"
     ],
     "resources": {
       "media": [

@@ -53,8 +53,28 @@ large second wave of modules, touch interaction, and a live settings preview.
       gabbro = center + 8. Both added to `targetPlatforms`; all 7 platforms build; screenshots
       confirm chalk (4 pods) and gabbro (8 pods, matches mockup C) plus basalt/emery regression.
       Round uses a plain white field (no per-cell background colors yet — a follow-up).
-- [ ] **3c — On-watch modules:** BT status, HR, goal ring, sleep, calories, active minutes,
+- [x] **3c — On-watch modules:** 12 new modules (enum 10–21) slotted into the registry —
+      BT status (+ disconnect vibe), HR, step-goal ring, sleep, calories, active minutes,
       moon phase, day-of-year, count-up, custom text, Quiet Time, analog mini-clock.
+  - [x] Registry extended for **custom-draw** modules: `ModuleDef.custom_draw` (+ optional
+        `custom_frame`) generalizes the old Stats-divider pattern. A dedicated `Layer` is
+        created via `layer_create_with_data` storing the cell index, so the proc recovers
+        geometry/color/data. The goal ring (gray track + fg progress arc, step count
+        centered) and analog mini-clock (face, ticks, hour/minute hands) use it; the other
+        10 modules are pure TextLayers. Text-only modules leave `custom_draw` NULL — zero
+        change to the existing 9.
+  - [x] Data producers: connection service (BT), Health (HR/sleep/calories/active), and
+        tick-driven moon/day-of-year/count-up/Quiet Time. New settings: BluetoothVibe,
+        CountupDate/Label, CustomText, StepGoal (persist 155–159; message keys + Clay inputs).
+  - [x] Compact `MODULE_PODS` variants for all 12; Clay dropdown grew to 21 options.
+  - [x] Build all 7 platforms; screenshots basalt 2×2, emery 3×3, chalk (center+4),
+        gabbro (center+8) for both the text wave and the ring/mini-clock wave.
+  - [x] **Follow-up (from 3b): round per-cell background colors** — the round background
+        proc now paints a rounded "chip" behind each pod whose background is enabled
+        (center pod radius 10, ring pods radius 6); confirmed on chalk + gabbro.
+  - [x] **Follow-up (from 3a): live module reassignment** — verified headlessly via
+        `pebble send-app-message` (Quadrant*Module keys): cells swap module live through the
+        `cell_build_ui` rebuild path with no restart.
 - [ ] **3d — Phone-data modules:** sunrise/sunset, weather hi/lo/humidity/wind/UV, AQI,
       ICS calendar, stock/crypto ticker; replace raw TZ offset with an IANA city picker
       (pkjs computes DST-correct offset via `Intl` and pushes updates).
