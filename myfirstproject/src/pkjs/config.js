@@ -1,263 +1,131 @@
-module.exports = [
-  {
-    "type": "heading",
-    "defaultValue": "Modules Watchface Settings"
-  },
-  {
-    "type": "section",
-    "items": [
-      {
-        "type": "heading",
-        "defaultValue": "Weather Settings"
-      },
-      {
-        "type": "toggle",
-        "messageKey": "TemperatureUnit",
-        "label": "Use Celsius",
-        "description": "Temperature in Celsius instead of Fahrenheit",
-        "defaultValue": false
-      },
-      {
-        "type": "toggle",
-        "messageKey": "UseGPS",
-        "label": "Auto Location (GPS)",
-        "description": "Use phone's GPS for weather location",
-        "defaultValue": true
-      },
-      {
-        "type": "input",
-        "messageKey": "ZipCode",
-        "defaultValue": "",
-        "label": "ZIP Code / City",
-        "description": "Enter ZIP code or city name (used when GPS is off)",
-        "attributes": {
-          "placeholder": "e.g., 90210 or London"
-        }
-      }
-    ]
-  },
-  {
-    "type": "section",
-    "items": [
-      {
-        "type": "heading",
-        "defaultValue": "Quadrant Module Layout"
-      },
-      {
-        "type": "text",
-        "defaultValue": "Drag modules to different quadrants. Each module can only appear once."
-      },
-      {
-        "type": "select",
-        "messageKey": "Quadrant1Module",
-        "label": "Top Left Quadrant (Q1)",
-        "defaultValue": "1",
-        "options": [
-          { "label": "Empty", "value": "0" },
-          { "label": "Date", "value": "1" },
-          { "label": "Weather", "value": "2" },
-          { "label": "Time", "value": "3" },
-          { "label": "Stats (Battery + Steps)", "value": "4" }
-        ]
-      },
-      {
-        "type": "select",
-        "messageKey": "Quadrant2Module",
-        "label": "Top Right Quadrant (Q2)",
-        "defaultValue": "2",
-        "options": [
-          { "label": "Empty", "value": "0" },
-          { "label": "Date", "value": "1" },
-          { "label": "Weather", "value": "2" },
-          { "label": "Time", "value": "3" },
-          { "label": "Stats (Battery + Steps)", "value": "4" }
-        ]
-      },
-      {
-        "type": "select",
-        "messageKey": "Quadrant3Module",
-        "label": "Bottom Left Quadrant (Q3)",
-        "defaultValue": "3",
-        "options": [
-          { "label": "Empty", "value": "0" },
-          { "label": "Date", "value": "1" },
-          { "label": "Weather", "value": "2" },
-          { "label": "Time", "value": "3" },
-          { "label": "Stats (Battery + Steps)", "value": "4" }
-        ]
-      },
-      {
-        "type": "select",
-        "messageKey": "Quadrant4Module",
-        "label": "Bottom Right Quadrant (Q4)",
-        "defaultValue": "4",
-        "options": [
-          { "label": "Empty", "value": "0" },
-          { "label": "Date", "value": "1" },
-          { "label": "Weather", "value": "2" },
-          { "label": "Time", "value": "3" },
-          { "label": "Stats (Battery + Steps)", "value": "4" }
-        ]
-      }
-    ]
-  },
-  {
-    "type": "section",
-    "items": [
-      {
-        "type": "heading",
-        "defaultValue": "Quadrant Background Colors"
-      },
-      {
-        "type": "text",
-        "defaultValue": function(config) {
-          var platform = config.platform;
-          if (platform && (platform === 'basalt' || platform === 'chalk' || platform === 'diorite' || platform === 'emery')) {
-            return "Enable background colors for each quadrant. Choose custom colors below.";
-          }
-          return "Enable light gray background for each quadrant (off = white).";
-        }
-      },
-      {
-        "type": "toggle",
-        "messageKey": "Quadrant1Background",
-        "label": "Q1 - Top Left Background",
-        "description": "Enable custom background",
-        "defaultValue": false
-      },
-      {
-        "type": "color",
-        "messageKey": "Quadrant1Color",
-        "label": "Q1 Background Color",
-        "defaultValue": "0xAAAAAA",
-        "sunlight": false,
-        "allowGray": true,
-        "capabilities": ['COLOR']
-      },
-      {
-        "type": "toggle",
-        "messageKey": "Quadrant1AutoTextColor",
-        "label": "Q1 - Auto Text Color",
-        "description": "Automatically choose white/black text based on background",
-        "defaultValue": true,
-        "capabilities": ['COLOR']
-      },
-      {
-        "type": "color",
-        "messageKey": "Quadrant1TextColor",
-        "label": "Q1 Custom Text Color",
-        "description": "Used when Auto Text Color is OFF",
-        "defaultValue": "0x000000",
-        "sunlight": false,
-        "allowGray": true,
-        "capabilities": ['COLOR']
-      },
-      {
-        "type": "toggle",
-        "messageKey": "Quadrant2Background",
-        "label": "Q2 - Top Right Background",
-        "description": "Enable custom background",
-        "defaultValue": true
-      },
-      {
-        "type": "color",
-        "messageKey": "Quadrant2Color",
-        "label": "Q2 Background Color",
-        "defaultValue": "0xAAAAAA",
-        "sunlight": false,
-        "allowGray": true,
-        "capabilities": ['COLOR']
-      },
-      {
-        "type": "toggle",
-        "messageKey": "Quadrant2AutoTextColor",
-        "label": "Q2 - Auto Text Color",
-        "description": "Automatically choose white/black text based on background",
-        "defaultValue": true,
-        "capabilities": ['COLOR']
-      },
-      {
-        "type": "color",
-        "messageKey": "Quadrant2TextColor",
-        "label": "Q2 Custom Text Color",
-        "description": "Used when Auto Text Color is OFF",
-        "defaultValue": "0x000000",
-        "sunlight": false,
-        "allowGray": true,
-        "capabilities": ['COLOR']
-      },
-      {
-        "type": "toggle",
-        "messageKey": "Quadrant3Background",
-        "label": "Q3 - Bottom Left Background",
-        "description": "Enable custom background",
-        "defaultValue": true
-      },
-      {
-        "type": "color",
-        "messageKey": "Quadrant3Color",
-        "label": "Q3 Background Color",
-        "defaultValue": "0xAAAAAA",
-        "sunlight": false,
-        "allowGray": true,
-        "capabilities": ['COLOR']
-      },
-      {
-        "type": "toggle",
-        "messageKey": "Quadrant3AutoTextColor",
-        "label": "Q3 - Auto Text Color",
-        "description": "Automatically choose white/black text based on background",
-        "defaultValue": true,
-        "capabilities": ['COLOR']
-      },
-      {
-        "type": "color",
-        "messageKey": "Quadrant3TextColor",
-        "label": "Q3 Custom Text Color",
-        "description": "Used when Auto Text Color is OFF",
-        "defaultValue": "0x000000",
-        "sunlight": false,
-        "allowGray": true,
-        "capabilities": ['COLOR']
-      },
-      {
-        "type": "toggle",
-        "messageKey": "Quadrant4Background",
-        "label": "Q4 - Bottom Right Background",
-        "description": "Enable custom background",
-        "defaultValue": false
-      },
-      {
-        "type": "color",
-        "messageKey": "Quadrant4Color",
-        "label": "Q4 Background Color",
-        "defaultValue": "0xAAAAAA",
-        "sunlight": false,
-        "allowGray": true,
-        "capabilities": ['COLOR']
-      },
-      {
-        "type": "toggle",
-        "messageKey": "Quadrant4AutoTextColor",
-        "label": "Q4 - Auto Text Color",
-        "description": "Automatically choose white/black text based on background",
-        "defaultValue": true,
-        "capabilities": ['COLOR']
-      },
-      {
-        "type": "color",
-        "messageKey": "Quadrant4TextColor",
-        "label": "Q4 Custom Text Color",
-        "description": "Used when Auto Text Color is OFF",
-        "defaultValue": "0x000000",
-        "sunlight": false,
-        "allowGray": true,
-        "capabilities": ['COLOR']
-      }
-    ]
-  },
-  {
-    "type": "submit",
-    "defaultValue": "Save Settings"
+// Clay settings. Built programmatically so the 9 cells (emery 3x3; other
+// platforms use the first 4) and their colour controls don't have to be repeated by hand.
+
+var MODULE_OPTIONS = [
+  { "label": "Empty", "value": "0" },
+  { "label": "Date", "value": "1" },
+  { "label": "Weather", "value": "2" },
+  { "label": "Time", "value": "3" },
+  { "label": "Stats (Battery + Steps)", "value": "4" },
+  { "label": "Second Time Zone", "value": "5" },
+  { "label": "Week Number", "value": "6" },
+  { "label": "Countdown", "value": "7" },
+  { "label": "Distance", "value": "8" },
+  { "label": "Calendar (next event)", "value": "9" }
+];
+
+// Default module per cell (1-indexed cell -> module value)
+var CELL_DEFAULTS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+var BG_DEFAULTS = [false, true, true, false, true, false, false, true, false];
+
+function moduleSelects() {
+  var items = [{
+    "type": "text",
+    "defaultValue": "Cells 1-4 are used on every watch (2x2). Cells 5-9 add the extra " +
+      "cells on the Pebble Time 2 / emery 3x3 grid."
+  }];
+  for (var i = 1; i <= 9; i++) {
+    items.push({
+      "type": "select",
+      "messageKey": "Quadrant" + i + "Module",
+      "label": "Cell " + i,
+      "defaultValue": CELL_DEFAULTS[i - 1],
+      "options": MODULE_OPTIONS
+    });
   }
+  return items;
+}
+
+function colorControls() {
+  var items = [{
+    "type": "text",
+    "defaultValue": "Per-cell background and text colours. Colour controls apply to colour watches."
+  }];
+  for (var i = 1; i <= 9; i++) {
+    items.push({
+      "type": "toggle",
+      "messageKey": "Quadrant" + i + "Background",
+      "label": "Cell " + i + " - Background",
+      "description": "Enable custom background",
+      "defaultValue": BG_DEFAULTS[i - 1]
+    });
+    items.push({
+      "type": "color",
+      "messageKey": "Quadrant" + i + "Color",
+      "label": "Cell " + i + " Background Color",
+      "defaultValue": "0xAAAAAA",
+      "sunlight": false,
+      "allowGray": true,
+      "capabilities": ["COLOR"]
+    });
+    items.push({
+      "type": "toggle",
+      "messageKey": "Quadrant" + i + "AutoTextColor",
+      "label": "Cell " + i + " - Auto Text Color",
+      "description": "Automatically choose white/black text based on background",
+      "defaultValue": true,
+      "capabilities": ["COLOR"]
+    });
+    items.push({
+      "type": "color",
+      "messageKey": "Quadrant" + i + "TextColor",
+      "label": "Cell " + i + " Custom Text Color",
+      "description": "Used when Auto Text Color is OFF",
+      "defaultValue": "0x000000",
+      "sunlight": false,
+      "allowGray": true,
+      "capabilities": ["COLOR"]
+    });
+  }
+  return items;
+}
+
+function tzOffsetOptions() {
+  var opts = [];
+  for (var h = -12; h <= 14; h++) {
+    opts.push({ "label": "Local " + (h >= 0 ? "+" : "") + h + "h", "value": String(h * 60) });
+  }
+  return opts;
+}
+
+module.exports = [
+  { "type": "heading", "defaultValue": "Modules Watchface Settings" },
+  {
+    "type": "section",
+    "items": [
+      { "type": "heading", "defaultValue": "Weather Settings" },
+      { "type": "toggle", "messageKey": "TemperatureUnit", "label": "Use Celsius",
+        "description": "Temperature in Celsius instead of Fahrenheit", "defaultValue": false },
+      { "type": "toggle", "messageKey": "UseGPS", "label": "Auto Location (GPS)",
+        "description": "Use phone's GPS for weather location", "defaultValue": true },
+      { "type": "input", "messageKey": "ZipCode", "defaultValue": "", "label": "ZIP Code / City",
+        "description": "Enter ZIP code or city name (used when GPS is off)",
+        "attributes": { "placeholder": "e.g., 90210 or London" } }
+    ]
+  },
+  {
+    "type": "section",
+    "items": [{ "type": "heading", "defaultValue": "Module Layout" }].concat(moduleSelects())
+  },
+  {
+    "type": "section",
+    "items": [
+      { "type": "heading", "defaultValue": "Module Options" },
+      { "type": "select", "messageKey": "TZOffset", "label": "Second Time Zone Offset",
+        "defaultValue": "0", "options": tzOffsetOptions() },
+      { "type": "input", "messageKey": "TZLabel", "label": "Second Time Zone Label",
+        "defaultValue": "TZ2", "attributes": { "placeholder": "e.g., LON", "maxlength": 6 } },
+      { "type": "input", "messageKey": "CountdownDate", "label": "Countdown Target Date",
+        "defaultValue": "", "attributes": { "placeholder": "YYYY-MM-DD", "type": "date" } },
+      { "type": "input", "messageKey": "CountdownLabel", "label": "Countdown Label",
+        "defaultValue": "EVENT", "attributes": { "placeholder": "e.g., TRIP", "maxlength": 8 } },
+      { "type": "toggle", "messageKey": "DistanceUnits", "label": "Use Kilometers",
+        "description": "Distance in km instead of miles", "defaultValue": true }
+    ]
+  },
+  {
+    "type": "section",
+    "items": [{ "type": "heading", "defaultValue": "Cell Colors" }].concat(colorControls())
+  },
+  { "type": "submit", "defaultValue": "Save Settings" }
 ];
