@@ -45,8 +45,14 @@ large second wave of modules, touch interaction, and a live settings preview.
   - [x] Build all 5 current platforms + emulator regression (basalt 2×2, emery 3×3, aplite B&W).
         Note: module *reassignment* via the config page still needs a hands-on test
         (exercises the new cell rebuild path).
-- [ ] **3b — chalk + gabbro:** radial renderer behind `PBL_ROUND`, condensed pod variants of
-      Date/Weather/Stats, add both to `targetPlatforms`, all-platform builds + screenshots.
+- [x] **3b — chalk + gabbro:** radial renderer behind `ROUND_LAYOUT` (center pod + ring of
+      pods). Per-cell geometry now flows through `s_cell_frame[]`, so `scale_layout`/`sysfont`
+      work for grid cells and round pods alike. Compact `MODULE_PODS[]` descriptors give
+      Date/Weather/Stats/Calendar a two-line, icon-free form on ring pods; the center pod uses
+      the full descriptor (Time). Pod count/sizing tuned per platform: chalk = center + 4,
+      gabbro = center + 8. Both added to `targetPlatforms`; all 7 platforms build; screenshots
+      confirm chalk (4 pods) and gabbro (8 pods, matches mockup C) plus basalt/emery regression.
+      Round uses a plain white field (no per-cell background colors yet — a follow-up).
 - [ ] **3c — On-watch modules:** BT status, HR, goal ring, sleep, calories, active minutes,
       moon phase, day-of-year, count-up, custom text, Quiet Time, analog mini-clock.
 - [ ] **3d — Phone-data modules:** sunrise/sunset, weather hi/lo/humidity/wind/UV, AQI,

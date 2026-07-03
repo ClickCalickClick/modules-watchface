@@ -18,16 +18,41 @@ typedef enum {
   NUM_MODULE_TYPES
 } ModuleType;
 
-// Grid dimensions per platform: emery (200x228) uses a 3x3 grid; the 144x168
-// platforms (aplite/basalt/diorite/flint) stay 2x2. MAX_CELLS sizes the arrays.
-#if defined(PBL_PLATFORM_EMERY)
+// Cell layout per platform:
+//  - Round platforms (chalk 180x180, gabbro 260x260) use a radial layout: one
+//    center pod (cell 0) plus a ring of RING_PODS pods. No grid.
+//  - emery (200x228) uses a 3x3 grid; the 144x168 rect platforms stay 2x2.
+// MAX_CELLS sizes the per-cell arrays.
+#if defined(PBL_ROUND)
+  #define ROUND_LAYOUT 1
+  // Radial layout tuning as percentages of screen size. The smaller 180x180
+  // chalk fits 4 legible pods; gabbro's 260x260 fits 8. CENTER/RING/POD percents
+  // are chosen so ring pods clear the center pod and the round edge.
+  #if defined(PBL_PLATFORM_CHALK)
+    #define RING_PODS 4
+    #define CENTER_W_PCT 38
+    #define CENTER_H_PCT 48
+    #define RING_PCT   36
+    #define POD_W_PCT  32
+    #define POD_H_PCT  22
+  #else
+    #define RING_PODS 8   // gabbro 260x260
+    #define CENTER_W_PCT 40
+    #define CENTER_H_PCT 44
+    #define RING_PCT   34
+    #define POD_W_PCT  28
+    #define POD_H_PCT  20
+  #endif
+  #define NUM_CELLS (1 + RING_PODS)
+#elif defined(PBL_PLATFORM_EMERY)
   #define GRID_COLS 3
   #define GRID_ROWS 3
+  #define NUM_CELLS (GRID_COLS * GRID_ROWS)
 #else
   #define GRID_COLS 2
   #define GRID_ROWS 2
+  #define NUM_CELLS (GRID_COLS * GRID_ROWS)
 #endif
-#define NUM_CELLS (GRID_COLS * GRID_ROWS)
 #define MAX_CELLS 9
 
 // Base coordinate space the module layout templates are authored in (one 144x168 quadrant).
@@ -80,7 +105,21 @@ static int s_current_temperature = 0;
 static bool s_has_temperature = false;
 
 // Module assignments for each cell (cells 0..MAX_CELLS-1; only NUM_CELLS used).
-// Cells 5-9 default to the new module types so emery's 3x3 is fully populated.
+#ifdef ROUND_LAYOUT
+// Round: cell 0 is the center pod (Time); cells 1.. are the ring, clockwise from top.
+static ModuleType s_quadrant_modules[MAX_CELLS] = {
+  MODULE_TIME,      // cell 0 (center)
+  MODULE_DATE,      // ring...
+  MODULE_WEATHER,
+  MODULE_WEEK,
+  MODULE_DISTANCE,
+  MODULE_STATS,
+  MODULE_COUNTDOWN,
+  MODULE_CALENDAR,
+  MODULE_TZ
+};
+#else
+// Grid: cells 5-9 default to the new module types so emery's 3x3 is fully populated.
 static ModuleType s_quadrant_modules[MAX_CELLS] = {
   MODULE_DATE,      // cell 0
   MODULE_WEATHER,   // cell 1
@@ -92,6 +131,7 @@ static ModuleType s_quadrant_modules[MAX_CELLS] = {
   MODULE_DISTANCE,  // cell 7 (emery)
   MODULE_CALENDAR   // cell 8 (emery)
 };
+#endif
 
 // Background state for each cell (true = light gray/color, false = white)
 static bool s_quadrant_backgrounds[MAX_CELLS] = {
@@ -122,40 +162,67 @@ static bool s_dist_use_km = true;              // true = km, false = miles
 // Runtime screen geometry, computed once from the actual display bounds so the
 // layout adapts to any platform (e.g. emery 200x228) instead of static 144x168.
 static int16_t s_screen_w, s_screen_h, s_quad_w, s_quad_h;
-static GPoint s_quadrant_origins[MAX_CELLS];
+// Absolute on-screen rect for each cell. Grid platforms fill these as a uniform
+// grid; round platforms fill them as a center pod + a ring of smaller pods.
+// All layout math scales the BASE_QUAD templates into these rects, so the same
+// module descriptors render on both grid and round.
+static GRect s_cell_frame[MAX_CELLS];
 
 static void compute_screen_geometry(Window *window) {
   GRect b = layer_get_bounds(window_get_root_layer(window));
   s_screen_w = b.size.w;
   s_screen_h = b.size.h;
+
+#ifdef ROUND_LAYOUT
+  int16_t cx = s_screen_w / 2, cy = s_screen_h / 2;
+  // Center pod (cell 0): a square-ish box centered on screen.
+  int16_t cw = (s_screen_w * CENTER_W_PCT) / 100;
+  int16_t ch = (s_screen_h * CENTER_H_PCT) / 100;
+  s_cell_frame[0] = GRect(cx - cw / 2, cy - ch / 2, cw, ch);
+  // Ring pods: evenly spaced on a circle, starting at the top (12 o'clock).
+  int16_t ring_r = (s_screen_w * RING_PCT) / 100;
+  int16_t pw = (s_screen_w * POD_W_PCT) / 100;
+  int16_t ph = (s_screen_h * POD_H_PCT) / 100;
+  for (int i = 0; i < RING_PODS; i++) {
+    int32_t angle = (TRIG_MAX_ANGLE * i) / RING_PODS - TRIG_MAX_ANGLE / 4;
+    int16_t px = cx + (ring_r * cos_lookup(angle)) / TRIG_MAX_RATIO;
+    int16_t py = cy + (ring_r * sin_lookup(angle)) / TRIG_MAX_RATIO;
+    s_cell_frame[i + 1] = GRect(px - pw / 2, py - ph / 2, pw, ph);
+  }
+  s_quad_w = cw;
+  s_quad_h = ch;
+#else
   s_quad_w = s_screen_w / GRID_COLS;
   s_quad_h = s_screen_h / GRID_ROWS;
   for (int i = 0; i < NUM_CELLS; i++) {
-    s_quadrant_origins[i] = GPoint((i % GRID_COLS) * s_quad_w, (i / GRID_COLS) * s_quad_h);
+    s_cell_frame[i] = GRect((i % GRID_COLS) * s_quad_w, (i / GRID_COLS) * s_quad_h,
+                            s_quad_w, s_quad_h);
   }
+#endif
 }
 
-// Scale a base-coordinate GRect (authored for BASE_QUAD_W x BASE_QUAD_H) to the
-// actual quadrant size, then translate by the quadrant origin. Integer
-// multiply-before-divide keeps precision without floats.
-static GRect scale_layout(GRect base, GPoint origin) {
+// Scale a base-coordinate GRect (authored for BASE_QUAD_W x BASE_QUAD_H) into the
+// given cell's on-screen frame. Integer multiply-before-divide keeps precision
+// without floats.
+static GRect scale_layout(GRect base, int cell) {
+  GRect f = s_cell_frame[cell];
   return GRect(
-    origin.x + (base.origin.x * s_quad_w) / BASE_QUAD_W,
-    origin.y + (base.origin.y * s_quad_h) / BASE_QUAD_H,
-    (base.size.w * s_quad_w) / BASE_QUAD_W,
-    (base.size.h * s_quad_h) / BASE_QUAD_H);
+    f.origin.x + (base.origin.x * f.size.w) / BASE_QUAD_W,
+    f.origin.y + (base.origin.y * f.size.h) / BASE_QUAD_H,
+    (base.size.w * f.size.w) / BASE_QUAD_W,
+    (base.size.h * f.size.h) / BASE_QUAD_H);
 }
 
-// Position a bitmap icon within the scaled quadrant. bitmap_layer does not upscale
-// image data, so the layer is sized to the loaded bitmap's native pixels (the SDK
-// selects a larger ~emery asset automatically); only the position is scaled.
-static GRect place_icon(GRect base, GPoint origin, GBitmap *bmp, bool center_x) {
-  GRect scaled = scale_layout(base, origin);
+// Position a bitmap icon within the cell's scaled frame. bitmap_layer does not
+// upscale image data, so the layer is sized to the loaded bitmap's native pixels
+// (the SDK selects a larger ~emery asset automatically); only the position is scaled.
+static GRect place_icon(GRect base, int cell, GBitmap *bmp, bool center_x) {
+  GRect scaled = scale_layout(base, cell);
   if (bmp) {
     GSize sz = gbitmap_get_bounds(bmp).size;
     scaled.size = sz;
     if (center_x) {
-      scaled.origin.x = origin.x + (s_quad_w - sz.w) / 2;
+      scaled.origin.x = s_cell_frame[cell].origin.x + (s_cell_frame[cell].size.w - sz.w) / 2;
     }
   }
   return scaled;
@@ -170,11 +237,11 @@ typedef enum {
   ROLE_HERO,
 } FontRole;
 
-static GFont sysfont(FontRole role) {
+static GFont sysfont(FontRole role, int16_t h) {
   // Pick a font tier from the available CELL height, not the screen size: emery's
-  // 3x3 cells (~76px) are smaller than the 2x2 cells (84px / 114px), so big screens
-  // can still need small fonts. Buckets: LARGE (>=100), MED (>=84), SMALL (<84).
-  int16_t h = s_quad_h;
+  // 3x3 cells (~76px) are smaller than the 2x2 cells (84px / 114px), and round
+  // ring pods (~43px) are smaller still, so big screens can still need small
+  // fonts. Buckets: LARGE (>=100), MED (>=84), SMALL (<84).
   if (h >= 100) {            // large cell (e.g. emery 2x2)
     switch (role) {
       case ROLE_LABEL_SM: return fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
@@ -332,6 +399,90 @@ static const ModuleDef MODULE_DEFS[NUM_MODULE_TYPES] = {
   },
 };
 
+#ifdef ROUND_LAYOUT
+// Compact descriptors for round ring pods, which are much smaller than grid
+// cells. Multi-part modules drop to a two-line label+value form and shed icons;
+// the already-compact modules (TZ/Week/Countdown/Distance) reuse their grid
+// layout. The center pod (cell 0) uses the full MODULE_DEFS entry, not these.
+static const ModuleDef MODULE_PODS[NUM_MODULE_TYPES] = {
+  [MODULE_EMPTY] = { .num_texts = 0 },
+  [MODULE_DATE] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 4},  {72, 30}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, s_day_name_buffer},
+      {{{0, 28}, {72, 82}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_day_number_buffer},
+    },
+  },
+  [MODULE_WEATHER] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 44}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_temperature_buffer},
+      {{{0, 46}, {72, 80}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, s_weather_condition_buffer},
+    },
+  },
+  [MODULE_TIME] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 2},  {72, 42}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_hour_buffer},
+      {{{0, 40}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_minute_buffer},
+    },
+  },
+  [MODULE_STATS] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 44}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_battery_buffer},
+      {{{0, 46}, {72, 80}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, s_steps_buffer},
+    },
+  },
+  [MODULE_TZ] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 24}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, s_tz_label},
+      {{{0, 26}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_tz_time_buffer},
+    },
+  },
+  [MODULE_WEEK] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "WEEK"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_week_buffer},
+    },
+  },
+  [MODULE_COUNTDOWN] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, s_countdown_label},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_cd_buffer},
+    },
+  },
+  [MODULE_DISTANCE] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "DIST"},
+      {{{0, 30}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_dist_buffer},
+    },
+  },
+  [MODULE_CALENDAR] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 44}}, ROLE_LABEL_MD, ROLE_LABEL_MD, GTextAlignmentCenter, s_cal_title_buffer},
+      {{{0, 46}, {72, 80}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, s_cal_time_buffer},
+    },
+  },
+};
+#endif
+
+// Descriptor to use for a cell. On round, ring pods (cell > 0) use the compact
+// MODULE_PODS table; the center pod and all grid cells use the full MODULE_DEFS.
+static const ModuleDef *def_for_cell(int cell) {
+#ifdef ROUND_LAYOUT
+  if (cell > 0) {
+    return &MODULE_PODS[s_quadrant_modules[cell]];
+  }
+#endif
+  return &MODULE_DEFS[s_quadrant_modules[cell]];
+}
+
 // Per-cell UI: layers exist only while a module needing them is assigned.
 typedef struct {
   TextLayer *text[MAX_TEXT_PARTS];
@@ -346,9 +497,18 @@ static ModuleType sanitize_module(int value) {
 
 // Background layer update procedure
 static void background_layer_update_proc(Layer *layer, GContext *ctx) {
-  // Fill quadrant backgrounds based on settings
+#ifdef ROUND_LAYOUT
+  // Round: plain white field with a subtle outline around the center pod. Per-cell
+  // background colors don't apply on round (pods are text over the white field).
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
+  graphics_context_set_stroke_color(ctx, GColorLightGray);
+  graphics_context_set_stroke_width(ctx, 1);
+  graphics_draw_round_rect(ctx, s_cell_frame[0], 10);
+#else
+  // Grid: fill each cell's background, then draw the separating grid lines.
   for (int q = 0; q < NUM_CELLS; q++) {
-    GPoint origin = s_quadrant_origins[q];
+    GRect f = s_cell_frame[q];
     GColor color;
 
 #ifdef PBL_COLOR
@@ -361,13 +521,12 @@ static void background_layer_update_proc(Layer *layer, GContext *ctx) {
 
     // Fill the right column / bottom row to the screen edge to avoid seams on
     // displays whose dimensions don't divide evenly by the grid.
-    int16_t w = (origin.x + s_quad_w >= s_screen_w) ? (s_screen_w - origin.x) : s_quad_w;
-    int16_t h = (origin.y + s_quad_h >= s_screen_h) ? (s_screen_h - origin.y) : s_quad_h;
+    int16_t w = (f.origin.x + s_quad_w >= s_screen_w) ? (s_screen_w - f.origin.x) : s_quad_w;
+    int16_t h = (f.origin.y + s_quad_h >= s_screen_h) ? (s_screen_h - f.origin.y) : s_quad_h;
     graphics_context_set_fill_color(ctx, color);
-    graphics_fill_rect(ctx, GRect(origin.x, origin.y, w, h), 0, GCornerNone);
+    graphics_fill_rect(ctx, GRect(f.origin.x, f.origin.y, w, h), 0, GCornerNone);
   }
 
-  // Draw grid lines (one between each column and each row)
   graphics_context_set_stroke_color(ctx, GColorBlack);
   graphics_context_set_stroke_width(ctx, 1);
   for (int c = 1; c < GRID_COLS; c++) {
@@ -376,33 +535,36 @@ static void background_layer_update_proc(Layer *layer, GContext *ctx) {
   for (int r = 1; r < GRID_ROWS; r++) {
     graphics_draw_line(ctx, GPoint(0, r * s_quad_h), GPoint(s_screen_w, r * s_quad_h));
   }
+#endif
 }
 
-// Divider line for the Stats module
+// Divider line for the Stats module, scaled within the layer's own bounds.
 static void divider_layer_update_proc(Layer *layer, GContext *ctx) {
+  GRect b = layer_get_bounds(layer);
   graphics_context_set_stroke_color(ctx, GColorBlack);
-  // Scale the base (6,32)->(66,32) line (authored in BASE_QUAD space) to the quadrant.
-  int16_t x0 = (6 * s_quad_w) / BASE_QUAD_W;
-  int16_t x1 = (66 * s_quad_w) / BASE_QUAD_W;
-  int16_t y = (32 * s_quad_h) / BASE_QUAD_H;
-  graphics_draw_line(ctx, GPoint(x0, y), GPoint(x1, y)); // Relative to layer position
+  // Scale the base (6,32)->(66,32) line (authored in BASE_QUAD space) to the cell.
+  int16_t x0 = (6 * b.size.w) / BASE_QUAD_W;
+  int16_t x1 = (66 * b.size.w) / BASE_QUAD_W;
+  int16_t y = (32 * b.size.h) / BASE_QUAD_H;
+  graphics_draw_line(ctx, GPoint(x0, y), GPoint(x1, y));
 }
 
 // Font for a text part: B&W platforms bump certain roles when the cell has a
 // (dithered gray) background, for legibility.
 static GFont part_font(const TextPart *part, int cell) {
+  int16_t h = s_cell_frame[cell].size.h;
 #ifndef PBL_COLOR
   if (s_quadrant_backgrounds[cell]) {
-    return sysfont(part->role_bw_bg);
+    return sysfont(part->role_bw_bg, h);
   }
 #endif
-  return sysfont(part->role);
+  return sysfont(part->role, h);
 }
 
 // Push current data into an existing cell's layers: text pointers, icon bitmap
 // (which may have been recreated since the layer was built), and text colors.
 static void cell_render(int cell) {
-  const ModuleDef *def = &MODULE_DEFS[s_quadrant_modules[cell]];
+  const ModuleDef *def = def_for_cell(cell);
   CellUI *ui = &s_cell_ui[cell];
   GColor text_color = get_text_color_for_quadrant(cell);
 
@@ -415,7 +577,7 @@ static void cell_render(int cell) {
   if (def->icon && ui->icon) {
     bitmap_layer_set_bitmap(ui->icon, *def->icon);
     layer_set_frame(bitmap_layer_get_layer(ui->icon),
-      place_icon(def->icon_frame, s_quadrant_origins[cell], *def->icon, def->icon_center_x));
+      place_icon(def->icon_frame, cell, *def->icon, def->icon_center_x));
   }
 }
 
@@ -442,13 +604,12 @@ static void cell_destroy_ui(int cell) {
 static void cell_build_ui(int cell) {
   cell_destroy_ui(cell);
 
-  const ModuleDef *def = &MODULE_DEFS[s_quadrant_modules[cell]];
+  const ModuleDef *def = def_for_cell(cell);
   CellUI *ui = &s_cell_ui[cell];
-  GPoint origin = s_quadrant_origins[cell];
 
   for (int i = 0; i < def->num_texts; i++) {
     const TextPart *part = &def->texts[i];
-    TextLayer *tl = text_layer_create(scale_layout(part->frame, origin));
+    TextLayer *tl = text_layer_create(scale_layout(part->frame, cell));
     text_layer_set_background_color(tl, GColorClear);
     text_layer_set_font(tl, part_font(part, cell));
     text_layer_set_text_alignment(tl, part->align);
@@ -458,7 +619,7 @@ static void cell_build_ui(int cell) {
 
   if (def->icon) {
     BitmapLayer *bl = bitmap_layer_create(
-      place_icon(def->icon_frame, origin, *def->icon, def->icon_center_x));
+      place_icon(def->icon_frame, cell, *def->icon, def->icon_center_x));
     bitmap_layer_set_background_color(bl, GColorClear);
     bitmap_layer_set_compositing_mode(bl, GCompOpSet);
     layer_add_child(s_window_layer, bitmap_layer_get_layer(bl));
@@ -466,7 +627,8 @@ static void cell_build_ui(int cell) {
   }
 
   if (def->has_divider) {
-    ui->divider = layer_create(GRect(origin.x, origin.y, s_quad_w, s_quad_h));
+    // Divider spans the STATS cell; draws a rule scaled within its own bounds.
+    ui->divider = layer_create(s_cell_frame[cell]);
     layer_set_update_proc(ui->divider, divider_layer_update_proc);
     layer_add_child(s_window_layer, ui->divider);
   }
