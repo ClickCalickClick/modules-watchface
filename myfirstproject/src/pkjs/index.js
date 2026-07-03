@@ -2,7 +2,12 @@
 // watch automatically (autoHandleEvents). This file only handles weather.
 var Clay = require('@rebble/clay');
 var clayConfig = require('./config');
-var clay = new Clay(clayConfig);
+var preview = require('./preview');
+// customFn runs in the config page (this === ClayConfig): register + wire the
+// live preview component. Clay still auto-handles settings persistence/sending.
+var clay = new Clay(clayConfig, function(minified) {
+  preview.attach(this, minified);
+});
 
 var WEATHER_API_KEY = '680df99f9c264bde83a142148250811';
 // forecast.json (1 day, aqi=yes) returns current conditions + today's hi/lo +

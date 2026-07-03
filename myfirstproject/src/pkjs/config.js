@@ -1,36 +1,51 @@
 // Clay settings. Built programmatically so the 9 cells (emery 3x3; other
 // platforms use the first 4) and their colour controls don't have to be repeated by hand.
 
+// Module dropdown options, grouped into categories. Clay's select renders an
+// <optgroup> whenever an option's "value" is an array (see select.tpl), so each
+// group is { label, value: [ {label, value}, ... ] }. Empty stays ungrouped.
 var MODULE_OPTIONS = [
   { "label": "Empty", "value": "0" },
-  { "label": "Date", "value": "1" },
-  { "label": "Weather", "value": "2" },
-  { "label": "Time", "value": "3" },
-  { "label": "Stats (Battery + Steps)", "value": "4" },
-  { "label": "Second Time Zone", "value": "5" },
-  { "label": "Week Number", "value": "6" },
-  { "label": "Countdown", "value": "7" },
-  { "label": "Distance", "value": "8" },
-  { "label": "Calendar (next event)", "value": "9" },
-  { "label": "Bluetooth Status", "value": "10" },
-  { "label": "Heart Rate", "value": "11" },
-  { "label": "Step Goal Ring", "value": "12" },
-  { "label": "Sleep", "value": "13" },
-  { "label": "Calories", "value": "14" },
-  { "label": "Active Minutes", "value": "15" },
-  { "label": "Moon Phase", "value": "16" },
-  { "label": "Day of Year", "value": "17" },
-  { "label": "Count-up (days since)", "value": "18" },
-  { "label": "Custom Text", "value": "19" },
-  { "label": "Quiet Time", "value": "20" },
-  { "label": "Analog Mini-clock", "value": "21" },
-  { "label": "Sunrise / Sunset", "value": "22" },
-  { "label": "Weather High / Low", "value": "23" },
-  { "label": "Humidity", "value": "24" },
-  { "label": "Wind", "value": "25" },
-  { "label": "UV Index", "value": "26" },
-  { "label": "Air Quality (AQI)", "value": "27" },
-  { "label": "Crypto Ticker", "value": "28" }
+  { "label": "Core", "value": [
+    { "label": "Time", "value": "3" },
+    { "label": "Date", "value": "1" },
+    { "label": "Weather", "value": "2" },
+    { "label": "Stats (Battery + Steps)", "value": "4" }
+  ] },
+  { "label": "Clock & Calendar", "value": [
+    { "label": "Second Time Zone", "value": "5" },
+    { "label": "Analog Mini-clock", "value": "21" },
+    { "label": "Week Number", "value": "6" },
+    { "label": "Day of Year", "value": "17" },
+    { "label": "Countdown", "value": "7" },
+    { "label": "Count-up (days since)", "value": "18" },
+    { "label": "Calendar (next event)", "value": "9" }
+  ] },
+  { "label": "Health", "value": [
+    { "label": "Heart Rate", "value": "11" },
+    { "label": "Step Goal Ring", "value": "12" },
+    { "label": "Sleep", "value": "13" },
+    { "label": "Calories", "value": "14" },
+    { "label": "Active Minutes", "value": "15" },
+    { "label": "Distance", "value": "8" }
+  ] },
+  { "label": "Weather & Sky", "value": [
+    { "label": "Sunrise / Sunset", "value": "22" },
+    { "label": "Weather High / Low", "value": "23" },
+    { "label": "Humidity", "value": "24" },
+    { "label": "Wind", "value": "25" },
+    { "label": "UV Index", "value": "26" },
+    { "label": "Air Quality (AQI)", "value": "27" },
+    { "label": "Moon Phase", "value": "16" }
+  ] },
+  { "label": "Utility", "value": [
+    { "label": "Bluetooth Status", "value": "10" },
+    { "label": "Quiet Time", "value": "20" },
+    { "label": "Custom Text", "value": "19" }
+  ] },
+  { "label": "Finance", "value": [
+    { "label": "Crypto Ticker", "value": "28" }
+  ] }
 ];
 
 // Default module per cell (1-indexed cell -> module value)
@@ -39,6 +54,8 @@ var BG_DEFAULTS = [false, true, true, false, true, false, false, true, false];
 
 function moduleSelects() {
   var items = [{
+    "type": "watchPreview"
+  }, {
     "type": "text",
     "defaultValue": "Cells 1-4 are used on every watch (2x2). Cells 5-9 add the extra " +
       "cells on the Pebble Time 2 / emery 3x3 grid."

@@ -120,8 +120,29 @@ large second wave of modules, touch interaction, and a live settings preview.
         accelerometer; `emu-control` needs a browser/VNC page), so an actual tap→`Touchdown`
         with coordinates was validated only via an injected `handle_tap`. Confirm a physical
         tap on the emulator GUI (VNC/local display) or emery/gabbro hardware before shipping.
-- [ ] **3f — Clay live preview** custom component; group the (by then ~25) module options
-      into categorized option groups in the dropdowns.
+- [x] **3f — Clay live preview + grouped options** (pkjs only; no C change).
+  - [x] **Categorized dropdowns:** the 28 module options are grouped into Core / Clock &
+        Calendar / Health / Weather & Sky / Utility / Finance. Clay 1.0.10's `select.tpl`
+        renders an `<optgroup>` whenever an option's `value` is an array, so it's a pure
+        data-shape change (Empty stays ungrouped at top).
+  - [x] **Live preview** (`src/pkjs/preview.js`): a `clay.registerComponent` custom component
+        (`watchPreview`) draws a canvas mock of the layout for the active platform — grid
+        (2×2 / emery 3×3) or round (chalk center+4 / gabbro center+8) — simulating per-cell
+        background colors, brightness-based auto text color, manual text color, and B&W
+        dithering on the mono platforms (aplite/diorite/flint). Registered + wired via a
+        `customFn` on `AFTER_BUILD`; redraws on any module/colour change.
+  - [x] Verified headlessly as far as possible: pure layout/colour helpers unit-tested in
+        node; `render()` smoke-tested against a mock 2-D context; `registerComponent` API
+        conformance confirmed against the vendored Clay; and the drawing logic visually
+        validated by SVG mocks (emery grid, gabbro round, flint B&W) generated from the same
+        functions. All 7 platforms build; merged JS bundle valid.
+  - [ ] **Pending browser check:** the actual canvas rendering + Clay DOM wiring
+        (`item.$element.select`, change-event redraw) run only in the config webview, which
+        can't be driven headlessly — confirm by opening the settings page on device/emulator.
+
+**Phase 3 complete** (3a–3f). 29 module types across 7 platforms, touch on emery/gabbro,
+Clay live preview. Remaining open item is the browser-side confirmation of 3e's real-tap
+path and 3f's live-preview rendering.
 
 ## Verification (every phase)
 - `pebble build` green for every platform in `targetPlatforms`.
