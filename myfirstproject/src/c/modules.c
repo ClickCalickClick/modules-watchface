@@ -660,6 +660,41 @@ static const ModuleDef MODULE_DEFS[NUM_MODULE_TYPES] = {
   },
 };
 
+#ifdef PBL_TOUCH
+// Human-readable module names, used by the tap detail overlay (Phase 3e).
+static const char *const MODULE_NAMES[NUM_MODULE_TYPES] = {
+  [MODULE_EMPTY] = "EMPTY",
+  [MODULE_DATE] = "DATE",
+  [MODULE_WEATHER] = "WEATHER",
+  [MODULE_TIME] = "TIME",
+  [MODULE_STATS] = "STATS",
+  [MODULE_TZ] = "TIME ZONE",
+  [MODULE_WEEK] = "WEEK",
+  [MODULE_COUNTDOWN] = "COUNTDOWN",
+  [MODULE_DISTANCE] = "DISTANCE",
+  [MODULE_CALENDAR] = "NEXT EVENT",
+  [MODULE_BLUETOOTH] = "BLUETOOTH",
+  [MODULE_HEARTRATE] = "HEART RATE",
+  [MODULE_GOAL_RING] = "STEP GOAL",
+  [MODULE_SLEEP] = "SLEEP",
+  [MODULE_CALORIES] = "CALORIES",
+  [MODULE_ACTIVE] = "ACTIVE",
+  [MODULE_MOON] = "MOON PHASE",
+  [MODULE_DAY_OF_YEAR] = "DAY OF YEAR",
+  [MODULE_COUNTUP] = "COUNT-UP",
+  [MODULE_CUSTOM_TEXT] = "TEXT",
+  [MODULE_QUIET_TIME] = "QUIET TIME",
+  [MODULE_MINI_CLOCK] = "CLOCK",
+  [MODULE_SUN] = "SUN",
+  [MODULE_WEATHER_HL] = "HIGH / LOW",
+  [MODULE_HUMIDITY] = "HUMIDITY",
+  [MODULE_WIND] = "WIND",
+  [MODULE_UV] = "UV INDEX",
+  [MODULE_AQI] = "AIR QUALITY",
+  [MODULE_CRYPTO] = "CRYPTO",
+};
+#endif  // PBL_TOUCH
+
 #ifdef ROUND_LAYOUT
 // Compact descriptors for round ring pods, which are much smaller than grid
 // cells. Multi-part modules drop to a two-line label+value form and shed icons;
@@ -1063,6 +1098,12 @@ static void cell_build_ui(int cell) {
 }
 
 // Re-render every cell currently showing the given module (no-op if unassigned).
+#ifdef PBL_TOUCH
+// Refresh the detail overlay in place if it is currently showing this module
+// (defined with the touch/overlay code below).
+static void overlay_note_render(ModuleType module);
+#endif
+
 static void render_module(ModuleType module) {
   if (!s_window_layer) {
     return;  // window not loaded yet; cell_build_ui will render initial state
@@ -1072,7 +1113,211 @@ static void render_module(ModuleType module) {
       cell_render(q);
     }
   }
+#ifdef PBL_TOUCH
+  overlay_note_render(module);
+#endif
 }
+
+// Ask the phone to refetch everything (weather, calendar, crypto, TZ). The pkjs
+// 'appmessage' handler keys off the Temperature request, same as the 30-min tick.
+// Used by the tick handler and (on touch platforms) by tap-to-act.
+static void request_phone_refresh() {
+  DictionaryIterator *iter;
+  if (app_message_outbox_begin(&iter) == APP_MSG_OK) {
+    dict_write_uint8(iter, MESSAGE_KEY_Temperature, 1);
+    app_message_outbox_send();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tap interaction (Phase 3e): a TouchService tap maps to a cell, which pops a
+// temporary detail overlay for that cell's module. The whole subsystem is
+// PBL_TOUCH-only (emery + gabbro) — non-touch platforms carry none of it, and
+// don't pay the full-screen overlay layer's RAM.
+// ---------------------------------------------------------------------------
+#ifdef PBL_TOUCH
+
+static Layer *s_overlay_layer;      // full-screen; draws only while shown
+static int s_overlay_cell = -1;     // cell whose module is shown, -1 = hidden
+static AppTimer *s_overlay_timer;   // auto-dismiss timer
+static char s_ov_title[16];
+static char s_ov_value[24];
+
+// Stats tap-to-act: repeated taps cycle the overlay through these metrics.
+#define STATS_CYCLE_COUNT 4
+static int s_stats_cycle = 0;       // 0 steps, 1 distance, 2 calories, 3 active
+
+// Modules whose data comes from the phone; tapping one requests a fresh pull.
+static bool is_phone_data_module(ModuleType m) {
+  switch (m) {
+    case MODULE_WEATHER: case MODULE_SUN: case MODULE_WEATHER_HL:
+    case MODULE_HUMIDITY: case MODULE_WIND: case MODULE_UV: case MODULE_AQI:
+    case MODULE_CALENDAR: case MODULE_CRYPTO: case MODULE_TZ:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// Shared buffer holding a module's primary value (NULL => composed in build).
+static const char *module_primary_value(ModuleType m) {
+  switch (m) {
+    case MODULE_WEATHER:     return s_temperature_buffer;
+    case MODULE_STATS:
+    case MODULE_GOAL_RING:   return s_steps_buffer;
+    case MODULE_TZ:          return s_tz_time_buffer;
+    case MODULE_WEEK:        return s_week_buffer;
+    case MODULE_COUNTDOWN:   return s_cd_buffer;
+    case MODULE_DISTANCE:    return s_dist_buffer;
+    case MODULE_CALENDAR:    return s_cal_title_buffer;
+    case MODULE_BLUETOOTH:   return s_bt_buffer;
+    case MODULE_HEARTRATE:   return s_hr_buffer;
+    case MODULE_SLEEP:       return s_sleep_buffer;
+    case MODULE_CALORIES:    return s_calories_buffer;
+    case MODULE_ACTIVE:      return s_active_buffer;
+    case MODULE_MOON:        return s_moon_buffer;
+    case MODULE_DAY_OF_YEAR: return s_doy_buffer;
+    case MODULE_COUNTUP:     return s_countup_buffer;
+    case MODULE_CUSTOM_TEXT: return s_custom_text;
+    case MODULE_QUIET_TIME:  return s_quiet_buffer;
+    case MODULE_WEATHER_HL:  return s_hl_buffer;
+    case MODULE_HUMIDITY:    return s_humidity_buffer;
+    case MODULE_WIND:        return s_wind_buffer;
+    case MODULE_UV:          return s_uv_buffer;
+    case MODULE_AQI:         return s_aqi_buffer;
+    case MODULE_CRYPTO:      return s_crypto_buffer;
+    default:                 return NULL;  // Time/Date/Sun composed below
+  }
+}
+
+static void overlay_build_text(int cell) {
+  ModuleType m = s_quadrant_modules[cell];
+  snprintf(s_ov_title, sizeof(s_ov_title), "%s", MODULE_NAMES[m]);
+  switch (m) {
+    case MODULE_STATS: {
+      // Cycled by repeated taps; title becomes the metric name.
+      static const char *const names[STATS_CYCLE_COUNT] = {"STEPS", "DISTANCE", "CALORIES", "ACTIVE"};
+      const char *const vals[STATS_CYCLE_COUNT] = {s_steps_buffer, s_dist_buffer, s_calories_buffer, s_active_buffer};
+      snprintf(s_ov_title, sizeof(s_ov_title), "%s", names[s_stats_cycle]);
+      snprintf(s_ov_value, sizeof(s_ov_value), "%s", vals[s_stats_cycle]);
+      break;
+    }
+    case MODULE_TIME:
+    case MODULE_MINI_CLOCK:
+      snprintf(s_ov_value, sizeof(s_ov_value), "%s:%s", s_hour_buffer, s_minute_buffer);
+      break;
+    case MODULE_DATE:
+      snprintf(s_ov_value, sizeof(s_ov_value), "%s %s", s_day_name_buffer, s_day_number_buffer);
+      break;
+    case MODULE_SUN:
+      snprintf(s_ov_value, sizeof(s_ov_value), "%s %s", s_sunrise_buffer, s_sunset_buffer);
+      break;
+    default: {
+      const char *v = module_primary_value(m);
+      snprintf(s_ov_value, sizeof(s_ov_value), "%s", v ? v : "--");
+      break;
+    }
+  }
+}
+
+static void overlay_update_proc(Layer *layer, GContext *ctx) {
+  if (s_overlay_cell < 0) return;
+  GRect b = layer_get_bounds(layer);
+
+  // Scrim over the whole face, then a centered white panel with a black border.
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_fill_rect(ctx, b, 0, GCornerNone);
+
+  GRect panel = grect_inset(b, GEdgeInsets(b.size.h / 4, b.size.w / 8));
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, panel, 8, GCornersAll);
+  graphics_context_set_stroke_color(ctx, GColorBlack);
+  graphics_context_set_stroke_width(ctx, 2);
+  graphics_draw_round_rect(ctx, panel, 8);
+
+  graphics_context_set_text_color(ctx, GColorBlack);
+  GRect tr = GRect(panel.origin.x, panel.origin.y + 8, panel.size.w, 24);
+  graphics_draw_text(ctx, s_ov_title, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                     tr, GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+  GRect vr = GRect(panel.origin.x, panel.origin.y + panel.size.h / 2 - 20, panel.size.w, 40);
+  graphics_draw_text(ctx, s_ov_value, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD),
+                     vr, GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+}
+
+static void overlay_hide() {
+  if (s_overlay_timer) { app_timer_cancel(s_overlay_timer); s_overlay_timer = NULL; }
+  s_overlay_cell = -1;
+  if (s_overlay_layer) layer_mark_dirty(s_overlay_layer);
+}
+
+static void overlay_timeout(void *data) {
+  s_overlay_timer = NULL;
+  overlay_hide();
+}
+
+static void overlay_show(int cell) {
+  s_overlay_cell = cell;
+  overlay_build_text(cell);
+  if (s_overlay_layer) layer_mark_dirty(s_overlay_layer);
+  if (s_overlay_timer) app_timer_cancel(s_overlay_timer);
+  s_overlay_timer = app_timer_register(3000, overlay_timeout, NULL);
+}
+
+// If the overlay is open on a cell showing this module, rebuild its text so a
+// tap-triggered refresh (or any data update) shows through live.
+static void overlay_note_render(ModuleType module) {
+  if (s_overlay_cell >= 0 && s_overlay_layer &&
+      s_quadrant_modules[s_overlay_cell] == module) {
+    overlay_build_text(s_overlay_cell);
+    layer_mark_dirty(s_overlay_layer);
+  }
+}
+
+// Shared tap entry point (real TouchService taps and the debug injector).
+static void handle_tap(int cell) {
+  if (cell < 0 || cell >= NUM_CELLS) return;
+  ModuleType m = s_quadrant_modules[cell];
+  if (m == MODULE_EMPTY) { overlay_hide(); return; }
+
+  // Stats tap-to-act: repeated taps on the open overlay cycle the metric.
+  if (m == MODULE_STATS && s_overlay_cell == cell) {
+    s_stats_cycle = (s_stats_cycle + 1) % STATS_CYCLE_COUNT;
+    overlay_show(cell);   // rebuilds text with the new metric, resets the timer
+    return;
+  }
+  // Every other module toggles closed on a repeat tap.
+  if (m != MODULE_STATS && s_overlay_cell == cell) { overlay_hide(); return; }
+
+  // Tap-to-act: phone-data modules also trigger a refresh; the overlay updates
+  // live (see overlay_note_render) when the fresh values arrive.
+  if (is_phone_data_module(m)) {
+    request_phone_refresh();
+  }
+  overlay_show(cell);
+}
+
+// Map a screen point to a cell index (grid tiles fully; round pods may miss).
+static int point_to_cell(GPoint p) {
+  for (int i = 0; i < NUM_CELLS; i++) {
+    if (grect_contains_point(&s_cell_frame[i], &p)) return i;
+  }
+  return -1;
+}
+
+static GPoint s_touch_down;
+// A tap = touchdown then liftoff without much travel. Drags are ignored.
+static void touch_handler(const TouchEvent *e, void *context) {
+  if (e->type == TouchEvent_Touchdown) {
+    s_touch_down = GPoint(e->x, e->y);
+  } else if (e->type == TouchEvent_Liftoff) {
+    int dx = e->x - s_touch_down.x, dy = e->y - s_touch_down.y;
+    if (dx * dx + dy * dy <= 20 * 20) {
+      handle_tap(point_to_cell(GPoint(e->x, e->y)));
+    }
+  }
+}
+
+#endif  // PBL_TOUCH
 
 // ---------------------------------------------------------------------------
 // Data producers: format into the shared buffers, then re-render the cells
@@ -1452,12 +1697,9 @@ static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   update_moon();
   update_quiet_time();
 
-  // Request a weather refresh from the phone every 30 minutes
+  // Request a phone data refresh every 30 minutes
   if (tick_time->tm_min % 30 == 0) {
-    DictionaryIterator *iter;
-    app_message_outbox_begin(&iter);
-    dict_write_uint8(iter, MESSAGE_KEY_Temperature, 1);
-    app_message_outbox_send();
+    request_phone_refresh();
   }
 }
 
@@ -1797,10 +2039,25 @@ static void main_window_load(Window *window) {
   for (int i = 0; i < NUM_CELLS; i++) {
     cell_build_ui(i);
   }
+
+#ifdef PBL_TOUCH
+  // Tap detail overlay, added last so it draws on top of every cell. It paints
+  // nothing until a tap sets s_overlay_cell (see overlay_update_proc).
+  s_overlay_layer = layer_create(GRect(0, 0, s_screen_w, s_screen_h));
+  layer_set_update_proc(s_overlay_layer, overlay_update_proc);
+  layer_add_child(s_window_layer, s_overlay_layer);
+#endif
 }
 
 // Main window unload
 static void main_window_unload(Window *window) {
+#ifdef PBL_TOUCH
+  overlay_hide();
+  if (s_overlay_layer) {
+    layer_destroy(s_overlay_layer);
+    s_overlay_layer = NULL;
+  }
+#endif
   for (int i = 0; i < NUM_CELLS; i++) {
     cell_destroy_ui(i);
   }
@@ -1867,6 +2124,12 @@ static void init() {
   connection_service_subscribe((ConnectionHandlers) {
     .pebble_app_connection_handler = bluetooth_handler
   });
+#ifdef PBL_TOUCH
+  // Touch is available on emery + gabbro; taps drive the detail overlay.
+  if (touch_service_is_enabled()) {
+    touch_service_subscribe(touch_handler, NULL);
+  }
+#endif
 
   // Register AppMessage callbacks
   app_message_register_inbox_received(inbox_received_callback);
@@ -1879,6 +2142,9 @@ static void init() {
 static void deinit() {
   health_service_events_unsubscribe();
   connection_service_unsubscribe();
+#ifdef PBL_TOUCH
+  touch_service_unsubscribe();
+#endif
   window_destroy(s_main_window);
 }
 

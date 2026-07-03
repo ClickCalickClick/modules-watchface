@@ -97,7 +97,29 @@ large second wave of modules, touch interaction, and a live settings preview.
   - [x] New message keys: WeatherHigh/Low, Humidity, Wind, UV, AQI, SunriseMin/SunsetMin,
         CalendarUrl, TZCity, CryptoId/Label/Price (persist 160 for the last price).
         All 7 platforms build (aplite ~7.9 KB free heap).
-- [ ] **3e — Touch:** emulator delivery spike, then tap overlays + tap actions.
+- [x] **3e — Touch (emery + gabbro):** tap-driven detail overlays + tap-to-act.
+  - [x] **Capability spike (done first):** verified `TouchService` is real — declared in
+        `pebble.h` (`touch_service_subscribe`/`_unsubscribe`/`_is_enabled`, `TouchEvent` with
+        type + **x/y**), `PBL_TOUCH` defined only for emery+gabbro, and the symbols are real
+        `T` entries in those two `libpebble.a` (0 in basalt/aplite/chalk). Runtime: a
+        watchface subscription returns `touch_service_is_enabled()==1` on both emery and
+        gabbro emulators. (API gives coordinates, so hit-testing is exact — richer than the
+        "tap-only" originally planned.)
+  - [x] **Foundation:** subscribe under `#ifdef PBL_TOUCH`; a tap = Touchdown→Liftoff with
+        little travel; `point_to_cell()` hit-tests (x,y) against `s_cell_frame[]`; `handle_tap()`
+        is the shared entry point.
+  - [x] **Detail overlay:** full-screen scrim + centered panel showing the tapped module's
+        name (`MODULE_NAMES[]`) + primary value, auto-dismiss after 3 s, tap-again to close.
+        Works on grid + round.
+  - [x] **Tap-to-act:** phone-data modules (weather family, calendar, crypto, TZ) also fire
+        `request_phone_refresh()` and the open overlay updates live when fresh data lands;
+        Stats cycles Steps→Distance→Calories→Active on repeated taps.
+  - [x] The whole subsystem is `#ifdef PBL_TOUCH`, so non-touch platforms carry none of it
+        (aplite heap unchanged at ~7.9 KB). All 7 build.
+  - [ ] **Pending real-tap check:** no CLI touchscreen injector exists (`emu-tap` is the
+        accelerometer; `emu-control` needs a browser/VNC page), so an actual tap→`Touchdown`
+        with coordinates was validated only via an injected `handle_tap`. Confirm a physical
+        tap on the emulator GUI (VNC/local display) or emery/gabbro hardware before shipping.
 - [ ] **3f — Clay live preview** custom component; group the (by then ~25) module options
       into categorized option groups in the dropdowns.
 
