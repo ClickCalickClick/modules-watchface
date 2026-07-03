@@ -20,7 +20,7 @@
 
 ## 🎯 Purpose
 
-**Modules** is a feature-rich watchface designed for Pebble smartwatches that puts *you* in control. Unlike traditional watchfaces that lock you into a fixed layout, Modules breaks down your display into four customizable quadrants, each capable of displaying different information modules. Whether you prioritize weather data, fitness tracking, or simply want a unique aesthetic, Modules adapts to your lifestyle.
+**Modules** is a feature-rich watchface designed for Pebble smartwatches that puts *you* in control. Unlike traditional watchfaces that lock you into a fixed layout, Modules breaks down your display into a grid of customizable cells (four on most watches, nine on the Pebble Time 2), each capable of displaying a different information module. Whether you prioritize weather data, fitness tracking, or simply want a unique aesthetic, Modules adapts to your lifestyle.
 
 Built with love for the Pebble community and fully compatible with [Rebble](https://rebble.io/) services, this watchface breathes new life into your beloved smartwatch.
 
@@ -28,23 +28,26 @@ Built with love for the Pebble community and fully compatible with [Rebble](http
 
 ## ✨ Features
 
-### 📐 Modular 2x2 Grid Layout
+### 📐 Modular Grid Layout
 
-Your Pebble's display is divided into four intelligent quadrants:
+Your Pebble's display is divided into intelligent cells — a 2x2 grid on 144x168
+watches, and a 3x3 grid (nine cells) on the Pebble Time 2 (emery):
 
 ```
-┌─────────────┬─────────────┐
-│             │             │
-│   Q1 (TL)   │   Q2 (TR)   │
-│             │             │
-├─────────────┼─────────────┤
-│             │             │
-│   Q3 (BL)   │   Q4 (BR)   │
-│             │             │
+┌─────────────┬─────────────┐    ┌────────┬────────┬────────┐
+│             │             │    │   C1   │   C2   │   C3   │
+│   C1 (TL)   │   C2 (TR)   │    ├────────┼────────┼────────┤
+│             │             │    │   C4   │   C5   │   C6   │
+├─────────────┼─────────────┤    ├────────┼────────┼────────┤
+│             │             │    │   C7   │   C8   │   C9   │
+│   C3 (BL)   │   C4 (BR)   │    └────────┴────────┴────────┘
+│             │             │         Pebble Time 2 (3x3)
 └─────────────┴─────────────┘
+     Most watches (2x2)
 ```
 
-Each quadrant can display one of the following modules:
+Each cell can display any of the following modules (the same module can appear
+in multiple cells if you like):
 
 | Module | Description | Information Displayed |
 |--------|-------------|----------------------|
@@ -52,12 +55,17 @@ Each quadrant can display one of the following modules:
 | 🌤️ **Weather** | Current conditions | Weather icon, temperature, condition text |
 | 🕐 **Time** | Digital clock | Hour and minute in large, readable format |
 | 📊 **Stats** | Device statistics | Battery level with icon, step count |
-| ⬜ **Empty** | Blank quadrant | Clean, minimalist option |
+| 🌍 **Second Time Zone** | World clock | Time in another zone with a custom label |
+| 🗓️ **Week Number** | ISO week | Current week of the year |
+| ⏳ **Countdown** | Days until a date | Days remaining to your target date |
+| 🏃 **Distance** | Health data | Distance walked today (km or miles) |
+| 📆 **Calendar** | Next event | Upcoming event title and time *(data source coming in Phase 3)* |
+| ⬜ **Empty** | Blank cell | Clean, minimalist option |
 
 ### 🎨 Standout Features
 
-#### 🔄 **Drag-and-Drop Module Arrangement**
-Rearrange your watchface layout directly from your phone. Want the time in the top-left? Weather front and center? Stats at a glance? Simply select which module appears in each quadrant through the intuitive settings page.
+#### 🔄 **Flexible Module Arrangement**
+Rearrange your watchface layout directly from your phone. Want the time in the top-left? Weather front and center? Stats at a glance? Simply select which module appears in each cell through the intuitive settings page.
 
 #### 🌈 **Full Color Support** (Pebble Time, Time Steel, Time Round, Pebble 2 HR)
 - Custom background colors for each quadrant
@@ -146,31 +154,37 @@ Modules uses the **WeatherAPI.com** service to deliver accurate, real-time weath
 
 #### Changing Module Positions
 
-Each quadrant has a dropdown selector:
+Each cell has a dropdown selector:
 
 ```
-┌─ Top Left Quadrant (Q1) ─────────────────┐
+┌─ Cell 1 ──────────────────────────────────┐
 │  ○ Empty                                  │
 │  ● Date        ← Currently selected       │
 │  ○ Weather                                │
 │  ○ Time                                   │
 │  ○ Stats (Battery + Steps)                │
+│  ○ Second Time Zone                       │
+│  ○ Week Number                            │
+│  ○ Countdown                              │
+│  ○ Distance                               │
+│  ○ Calendar (next event)                  │
 └───────────────────────────────────────────┘
 ```
 
-**⚠️ Important**: Each module can only appear in one quadrant at a time. The app will alert you if you try to assign the same module to multiple locations.
+Cells 1-4 apply to every watch; cells 5-9 are used on the Pebble Time 2's 3x3
+grid. The same module may be assigned to more than one cell.
 
 ### Background Customization
 
-#### For Color Pebbles (Basalt, Chalk, Diorite, Emery)
+#### For Color Pebbles (Basalt, Emery)
 
-Each quadrant offers:
+Each cell offers:
 - **Enable Background**: Toggle to enable/disable custom coloring
 - **Background Color**: Full 64-color palette picker
 - **Auto Text Color**: Automatically selects black or white text based on background brightness
 - **Custom Text Color**: Manual color selection (when Auto is disabled)
 
-#### For Monochrome Pebbles (Aplite)
+#### For Monochrome Pebbles (Aplite, Diorite, Flint)
 
 - **Enable Background**: Toggle between white and light gray (dithered pattern)
 - Font sizes automatically adjust for better readability on dithered backgrounds
@@ -208,14 +222,15 @@ Each quadrant offers:
 
 ## 📱 Platform Compatibility
 
-| Platform | Display | Colors | Health API | Status |
-|----------|---------|--------|------------|--------|
-| **Aplite** (Pebble Classic, Steel) | 144×168 | B&W | ❌ | ✅ Supported |
-| **Basalt** (Pebble Time, Time Steel) | 144×168 | 64 colors | ✅ | ✅ Supported |
-| **Diorite** (Pebble 2) | 144×168 | B&W | ✅ | ✅ Supported |
-| **Emery** (Pebble Time 2*) | 200×228 | 64 colors | ✅ | ✅ Supported |
-
-*\*Pebble Time 2 was never released publicly but is supported for development/emulation*
+| Platform | Display | Colors | Health API | Grid | Status |
+|----------|---------|--------|------------|------|--------|
+| **Aplite** (Pebble Classic, Steel) | 144×168 | B&W | ❌ | 2x2 | ✅ Supported |
+| **Basalt** (Pebble Time, Time Steel) | 144×168 | 64 colors | ✅ | 2x2 | ✅ Supported |
+| **Diorite** (Pebble 2) | 144×168 | B&W | ✅ | 2x2 | ✅ Supported |
+| **Flint** (Core 2 Duo) | 144×168 | B&W | ✅ | 2x2 | ✅ Supported |
+| **Emery** (Pebble Time 2) | 200×228 | 64 colors | ✅ | 3x3 | ✅ Supported |
+| **Chalk** (Pebble Time Round) | 180×180 round | 64 colors | ✅ | — | 🔜 Phase 3 |
+| **Gabbro** (round, touch) | 260×260 round | 64 colors | ✅ | — | 🔜 Phase 3 |
 
 ---
 

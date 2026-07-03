@@ -29,19 +29,22 @@ large second wave of modules, touch interaction, and a live settings preview.
   Approximate fonts are acceptable; layout + colors must be faithful.
 
 ## Plan / status
-- [ ] **3a — Foundation refactor** (branch `phase3a-module-registry`)
-  - [ ] Module registry: per-type descriptor (layout template authored in BASE_QUAD space,
-        font roles, alignment, update callback); generic create/position/color/hide loops
+- [x] **3a — Foundation refactor** (branch `phase3a-module-registry`)
+  - [x] Module registry: per-type descriptor (layout template authored in BASE_QUAD space,
+        font roles, alignment, data-source pointer); generic per-cell build/render loops
         replace the six per-module switch statements in `modules.c`.
-  - [ ] Lazy layer creation: only modules assigned to a cell get layers (aplite has a
-        24 KB app-memory cap; ~25 eager module types would not fit).
-  - [ ] Delete the duplicate-module rule and the custom `webviewclosed` handler in
-        `src/pkjs/index.js` (Clay auto-handles settings; move the post-save weather
-        refetch into Clay's flow). Fixes the double-send race and the cells-5–9 gap.
-  - [ ] Weather over HTTPS.
-  - [ ] Strip per-minute APP_LOG debug spam.
-  - [ ] README refresh (9 modules, 3×3, platform matrix; Pebble Time 2 is shipping hardware).
-  - [ ] Build all 5 current platforms + emulator regression (basalt 2×2, emery 3×3).
+  - [x] Lazy layer creation: only modules assigned to a cell get layers (aplite has a
+        24 KB app-memory cap; ~25 eager module types would not fit). Duplicate module
+        assignments across cells are now supported.
+  - [x] Delete the duplicate-module rule and the custom `webviewclosed` handler in
+        `src/pkjs/index.js` (Clay auto-handles settings; weather refetch now runs 2 s
+        after save). Fixes the double-send race and the cells-5–9 gap.
+  - [x] Weather over HTTPS.
+  - [x] Strip per-minute APP_LOG debug spam.
+  - [x] README refresh (9 modules, 3×3, platform matrix; Pebble Time 2 is shipping hardware).
+  - [x] Build all 5 current platforms + emulator regression (basalt 2×2, emery 3×3, aplite B&W).
+        Note: module *reassignment* via the config page still needs a hands-on test
+        (exercises the new cell rebuild path).
 - [ ] **3b — chalk + gabbro:** radial renderer behind `PBL_ROUND`, condensed pod variants of
       Date/Weather/Stats, add both to `targetPlatforms`, all-platform builds + screenshots.
 - [ ] **3c — On-watch modules:** BT status, HR, goal ring, sleep, calories, active minutes,
