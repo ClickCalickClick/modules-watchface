@@ -89,7 +89,20 @@
       "CountupDate",
       "CountupLabel",
       "CustomText",
-      "StepGoal"
+      "StepGoal",
+      "WeatherHigh",
+      "WeatherLow",
+      "Humidity",
+      "Wind",
+      "UV",
+      "AQI",
+      "SunriseMin",
+      "SunsetMin",
+      "CalendarUrl",
+      "TZCity",
+      "CryptoId",
+      "CryptoLabel",
+      "CryptoPrice"
     ],
     "resources": {
       "media": [

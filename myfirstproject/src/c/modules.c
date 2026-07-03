@@ -28,6 +28,14 @@ typedef enum {
   MODULE_CUSTOM_TEXT = 19, // User-supplied custom text
   MODULE_QUIET_TIME = 20,  // Quiet Time on/off
   MODULE_MINI_CLOCK = 21,  // Analog mini-clock (custom-draw)
+  // Phase 3d phone-data wave (fed from the companion pkjs over AppMessage)
+  MODULE_SUN = 22,         // Sunrise / sunset times
+  MODULE_WEATHER_HL = 23,  // Today's forecast high / low
+  MODULE_HUMIDITY = 24,    // Relative humidity
+  MODULE_WIND = 25,        // Wind speed
+  MODULE_UV = 26,          // UV index
+  MODULE_AQI = 27,         // Air quality (US EPA index)
+  MODULE_CRYPTO = 28,      // Crypto price ticker (one symbol per cell)
   NUM_MODULE_TYPES
 } ModuleType;
 
@@ -89,6 +97,7 @@ typedef enum {
 #define PERSIST_COUNTUP_LABEL   157  // short label string
 #define PERSIST_CUSTOM_TEXT     158  // custom text string
 #define PERSIST_STEP_GOAL       159  // daily step goal for the progress ring
+#define PERSIST_CRYPTO_PRICE    160  // last crypto ticker string (from phone)
 
 // UI Elements
 static Window *s_main_window;
@@ -127,6 +136,17 @@ static char s_doy_buffer[6] = "--";
 static char s_countup_buffer[16] = "--";
 static char s_quiet_buffer[6] = "--";
 static char s_custom_text[24] = "TEXT";
+// Phase 3d phone-data buffers
+static char s_sunrise_buffer[8] = "--";
+static char s_sunset_buffer[8] = "--";
+static char s_hl_buffer[12] = "--";
+static char s_humidity_buffer[6] = "--";
+static char s_wind_buffer[8] = "--";
+static char s_uv_buffer[6] = "--";
+static char s_aqi_buffer[8] = "--";
+static char s_crypto_buffer[16] = "--";
+static int s_sunrise_min = -1;  // minutes since midnight (-1 = unset)
+static int s_sunset_min = -1;
 
 // Settings
 static bool s_use_celsius = false;
@@ -588,6 +608,56 @@ static const ModuleDef MODULE_DEFS[NUM_MODULE_TYPES] = {
     .num_texts = 0,
     .custom_draw = mini_clock_update_proc,
   },
+  // --- Phase 3d phone-data modules ---
+  [MODULE_SUN] = {
+    // Two value lines; each buffer carries an R/S prefix built on the watch.
+    .num_texts = 2,
+    .texts = {
+      {{{0, 12}, {72, 44}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_sunrise_buffer},
+      {{{0, 44}, {72, 76}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_sunset_buffer},
+    },
+  },
+  [MODULE_WEATHER_HL] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "HI / LO"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_hl_buffer},
+    },
+  },
+  [MODULE_HUMIDITY] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "HUMIDITY"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_humidity_buffer},
+    },
+  },
+  [MODULE_WIND] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "WIND"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_wind_buffer},
+    },
+  },
+  [MODULE_UV] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "UV INDEX"},
+      {{{0, 28}, {72, 80}}, ROLE_HERO, ROLE_HERO, GTextAlignmentCenter, s_uv_buffer},
+    },
+  },
+  [MODULE_AQI] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 28}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "AIR"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_aqi_buffer},
+    },
+  },
+  [MODULE_CRYPTO] = {
+    .num_texts = 1,
+    .texts = {
+      {{{2, 24}, {68, 78}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_crypto_buffer},
+    },
+  },
 };
 
 #ifdef ROUND_LAYOUT
@@ -741,6 +811,55 @@ static const ModuleDef MODULE_PODS[NUM_MODULE_TYPES] = {
   [MODULE_MINI_CLOCK] = {
     .num_texts = 0,
     .custom_draw = mini_clock_update_proc,
+  },
+  // --- Phase 3d phone-data modules (compact ring-pod form) ---
+  [MODULE_SUN] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 8},  {72, 44}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_sunrise_buffer},
+      {{{0, 44}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_sunset_buffer},
+    },
+  },
+  [MODULE_WEATHER_HL] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 26}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "HI/LO"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_hl_buffer},
+    },
+  },
+  [MODULE_HUMIDITY] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 26}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "HUM"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_humidity_buffer},
+    },
+  },
+  [MODULE_WIND] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 26}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "WIND"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_wind_buffer},
+    },
+  },
+  [MODULE_UV] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 26}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "UV"},
+      {{{0, 26}, {72, 80}}, ROLE_VALUE_LG, ROLE_VALUE_LG, GTextAlignmentCenter, s_uv_buffer},
+    },
+  },
+  [MODULE_AQI] = {
+    .num_texts = 2,
+    .texts = {
+      {{{0, 6},  {72, 26}}, ROLE_LABEL_SM, ROLE_LABEL_SM, GTextAlignmentCenter, "AIR"},
+      {{{0, 28}, {72, 80}}, ROLE_VALUE_MD, ROLE_VALUE_MD, GTextAlignmentCenter, s_aqi_buffer},
+    },
+  },
+  [MODULE_CRYPTO] = {
+    .num_texts = 1,
+    .texts = {
+      {{{2, 20}, {68, 78}}, ROLE_LABEL_MD, ROLE_LABEL_MD, GTextAlignmentCenter, s_crypto_buffer},
+    },
   },
 };
 #endif
@@ -1168,6 +1287,42 @@ static void update_quiet_time() {
   render_module(MODULE_QUIET_TIME);
 }
 
+// Format a minutes-since-midnight time with a one-char prefix, honoring the
+// watch's 12/24h setting (used by the sunrise/sunset module).
+static void format_daytime(char *buf, size_t sz, char prefix, int minutes) {
+  if (minutes < 0) {
+    snprintf(buf, sz, "%c --", prefix);
+    return;
+  }
+  int hh = (minutes / 60) % 24, mm = minutes % 60;
+  if (!clock_is_24h_style()) {
+    hh %= 12;
+    if (hh == 0) hh = 12;
+  }
+  snprintf(buf, sz, "%c%d:%02d", prefix, hh, mm);
+}
+
+// Reformat the sunrise/sunset buffers from the stored minute values (called on
+// receipt and whenever the 12/24h format may have changed).
+static void update_sun() {
+  format_daytime(s_sunrise_buffer, sizeof(s_sunrise_buffer), 'R', s_sunrise_min);
+  format_daytime(s_sunset_buffer, sizeof(s_sunset_buffer), 'S', s_sunset_min);
+  render_module(MODULE_SUN);
+}
+
+// Map a US EPA air-quality index (1..6) to a short label.
+static const char *aqi_word(int epa) {
+  switch (epa) {
+    case 1: return "GOOD";
+    case 2: return "MODER";
+    case 3: return "SENS";   // unhealthy for sensitive groups
+    case 4: return "BAD";
+    case 5: return "V.BAD";
+    case 6: return "HAZ";
+    default: return "--";
+  }
+}
+
 static void update_battery() {
   BatteryChargeState battery_state = battery_state_service_peek();
   snprintf(s_battery_buffer, sizeof(s_battery_buffer), "%d%%", battery_state.charge_percent);
@@ -1360,6 +1515,55 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
 
   if (temp_tuple || condition_tuple || icon_tuple || temp_unit_tuple) {
     render_module(MODULE_WEATHER);
+  }
+
+  // --- Phase 3d weather-family fields (from forecast.json) ---
+  // Hi/Lo arrive as ints already in the selected temperature unit.
+  Tuple *hi_t = dict_find(iterator, MESSAGE_KEY_WeatherHigh);
+  Tuple *lo_t = dict_find(iterator, MESSAGE_KEY_WeatherLow);
+  if (hi_t || lo_t) {
+    static int s_hi = 0, s_lo = 0;
+    if (hi_t) s_hi = (int)hi_t->value->int32;
+    if (lo_t) s_lo = (int)lo_t->value->int32;
+    snprintf(s_hl_buffer, sizeof(s_hl_buffer), "H%d L%d", s_hi, s_lo);
+    render_module(MODULE_WEATHER_HL);
+  }
+  Tuple *hum_t = dict_find(iterator, MESSAGE_KEY_Humidity);
+  if (hum_t) {
+    snprintf(s_humidity_buffer, sizeof(s_humidity_buffer), "%d%%", (int)hum_t->value->int32);
+    render_module(MODULE_HUMIDITY);
+  }
+  Tuple *wind_t = dict_find(iterator, MESSAGE_KEY_Wind);
+  if (wind_t) {
+    // pkjs sends wind already in the unit matching the temperature setting.
+    snprintf(s_wind_buffer, sizeof(s_wind_buffer), "%d%s",
+             (int)wind_t->value->int32, s_use_celsius ? "kph" : "mph");
+    render_module(MODULE_WIND);
+  }
+  Tuple *uv_t = dict_find(iterator, MESSAGE_KEY_UV);
+  if (uv_t) {
+    snprintf(s_uv_buffer, sizeof(s_uv_buffer), "%d", (int)uv_t->value->int32);
+    render_module(MODULE_UV);
+  }
+  Tuple *aqi_t = dict_find(iterator, MESSAGE_KEY_AQI);
+  if (aqi_t) {
+    snprintf(s_aqi_buffer, sizeof(s_aqi_buffer), "%s", aqi_word((int)aqi_t->value->int32));
+    render_module(MODULE_AQI);
+  }
+  Tuple *sr_t = dict_find(iterator, MESSAGE_KEY_SunriseMin);
+  Tuple *ss_t = dict_find(iterator, MESSAGE_KEY_SunsetMin);
+  if (sr_t || ss_t) {
+    if (sr_t) s_sunrise_min = (int)sr_t->value->int32;
+    if (ss_t) s_sunset_min = (int)ss_t->value->int32;
+    update_sun();
+  }
+  // Crypto ticker: pkjs sends a preformatted "SYM 62.2k" string.
+  Tuple *crypto_t = dict_find(iterator, MESSAGE_KEY_CryptoPrice);
+  if (crypto_t) {
+    strncpy(s_crypto_buffer, crypto_t->value->cstring, sizeof(s_crypto_buffer) - 1);
+    s_crypto_buffer[sizeof(s_crypto_buffer) - 1] = '\0';
+    persist_write_string(PERSIST_CRYPTO_PRICE, s_crypto_buffer);
+    render_module(MODULE_CRYPTO);
   }
 
   // --- Per-cell settings ---
@@ -1646,6 +1850,7 @@ static void init() {
   if (persist_exists(PERSIST_COUNTUP_LABEL)) persist_read_string(PERSIST_COUNTUP_LABEL, s_countup_label, sizeof(s_countup_label));
   if (persist_exists(PERSIST_CUSTOM_TEXT)) persist_read_string(PERSIST_CUSTOM_TEXT, s_custom_text, sizeof(s_custom_text));
   if (persist_exists(PERSIST_STEP_GOAL)) s_step_goal = persist_read_int(PERSIST_STEP_GOAL);
+  if (persist_exists(PERSIST_CRYPTO_PRICE)) persist_read_string(PERSIST_CRYPTO_PRICE, s_crypto_buffer, sizeof(s_crypto_buffer));
 
   // Create main window
   s_main_window = window_create();

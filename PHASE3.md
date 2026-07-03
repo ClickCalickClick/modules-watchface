@@ -75,9 +75,28 @@ large second wave of modules, touch interaction, and a live settings preview.
   - [x] **Follow-up (from 3a): live module reassignment** — verified headlessly via
         `pebble send-app-message` (Quadrant*Module keys): cells swap module live through the
         `cell_build_ui` rebuild path with no restart.
-- [ ] **3d — Phone-data modules:** sunrise/sunset, weather hi/lo/humidity/wind/UV, AQI,
-      ICS calendar, stock/crypto ticker; replace raw TZ offset with an IANA city picker
-      (pkjs computes DST-correct offset via `Intl` and pushes updates).
+- [x] **3d — Phone-data modules:** 7 new modules (enum 22–28) fed from the companion pkjs.
+  - [x] **Weather family:** pkjs fetch switched from `current.json` to `forecast.json?days=1&aqi=yes`
+        — one request now yields hi/lo, humidity, wind, UV, US-EPA AQI, and sunrise/sunset.
+        New modules Sunrise/Sunset, Weather Hi/Lo, Humidity, Wind, UV, AQI. Hi/lo + wind travel
+        in the unit matching the existing Celsius toggle (C labels via `s_use_celsius`);
+        sunrise/sunset sent as minutes-since-midnight so the watch formats them with
+        `clock_is_24h_style()`; AQI sent as the 1–6 index, mapped to a word on-watch.
+  - [x] **ICS calendar:** new pkjs fetch + parser (line-unfolding, DTSTART/SUMMARY scan, TZID/Z
+        handling, escape unfolding) picks the soonest upcoming `VEVENT` and feeds the existing
+        `CalendarTitle`/`CalendarTime` keys. Clay gains a Calendar ICS URL input. Parser
+        unit-tested in node; AppMessage→render confirmed in the emulator.
+  - [x] **IANA TZ city picker:** the raw-offset dropdown is replaced by a 20-city IANA list;
+        pkjs resolves the DST-correct offset with `Intl.DateTimeFormat` and pushes the existing
+        `TZOffset` (recomputed on launch / save / 30-min tick). Offset math unit-tested in node
+        across DST (incl. inverted southern-hemisphere). Note: the emulator's pypkjs may lack
+        `Intl`; the code catches and skips gracefully, and real-phone JS engines support it.
+  - [x] **Crypto ticker:** `MODULE_CRYPTO` fed by a keyless CoinGecko `simple/price` fetch;
+        Clay inputs for CoinGecko id + short label; pkjs sends a preformatted "SYM 62.2k"
+        string (persisted on-watch so it survives restart). Render confirmed via injection.
+  - [x] New message keys: WeatherHigh/Low, Humidity, Wind, UV, AQI, SunriseMin/SunsetMin,
+        CalendarUrl, TZCity, CryptoId/Label/Price (persist 160 for the last price).
+        All 7 platforms build (aplite ~7.9 KB free heap).
 - [ ] **3e — Touch:** emulator delivery spike, then tap overlays + tap actions.
 - [ ] **3f — Clay live preview** custom component; group the (by then ~25) module options
       into categorized option groups in the dropdowns.

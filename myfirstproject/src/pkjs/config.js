@@ -23,7 +23,14 @@ var MODULE_OPTIONS = [
   { "label": "Count-up (days since)", "value": "18" },
   { "label": "Custom Text", "value": "19" },
   { "label": "Quiet Time", "value": "20" },
-  { "label": "Analog Mini-clock", "value": "21" }
+  { "label": "Analog Mini-clock", "value": "21" },
+  { "label": "Sunrise / Sunset", "value": "22" },
+  { "label": "Weather High / Low", "value": "23" },
+  { "label": "Humidity", "value": "24" },
+  { "label": "Wind", "value": "25" },
+  { "label": "UV Index", "value": "26" },
+  { "label": "Air Quality (AQI)", "value": "27" },
+  { "label": "Crypto Ticker", "value": "28" }
 ];
 
 // Default module per cell (1-indexed cell -> module value)
@@ -92,12 +99,32 @@ function colorControls() {
   return items;
 }
 
-function tzOffsetOptions() {
-  var opts = [];
-  for (var h = -12; h <= 14; h++) {
-    opts.push({ "label": "Local " + (h >= 0 ? "+" : "") + h + "h", "value": String(h * 60) });
-  }
-  return opts;
+// IANA time zones for the second-time-zone picker. The phone (pkjs) resolves the
+// selected zone to a DST-correct offset via Intl and pushes it as TZOffset, so
+// the watch never has to know about DST.
+function tzCityOptions() {
+  return [
+    { "label": "UTC", "value": "UTC" },
+    { "label": "Honolulu", "value": "Pacific/Honolulu" },
+    { "label": "Anchorage", "value": "America/Anchorage" },
+    { "label": "Los Angeles", "value": "America/Los_Angeles" },
+    { "label": "Denver", "value": "America/Denver" },
+    { "label": "Chicago", "value": "America/Chicago" },
+    { "label": "New York", "value": "America/New_York" },
+    { "label": "Sao Paulo", "value": "America/Sao_Paulo" },
+    { "label": "London", "value": "Europe/London" },
+    { "label": "Paris / Berlin", "value": "Europe/Paris" },
+    { "label": "Athens", "value": "Europe/Athens" },
+    { "label": "Moscow", "value": "Europe/Moscow" },
+    { "label": "Dubai", "value": "Asia/Dubai" },
+    { "label": "India", "value": "Asia/Kolkata" },
+    { "label": "Bangkok", "value": "Asia/Bangkok" },
+    { "label": "Shanghai", "value": "Asia/Shanghai" },
+    { "label": "Tokyo", "value": "Asia/Tokyo" },
+    { "label": "Singapore", "value": "Asia/Singapore" },
+    { "label": "Sydney", "value": "Australia/Sydney" },
+    { "label": "Auckland", "value": "Pacific/Auckland" }
+  ];
 }
 
 module.exports = [
@@ -123,8 +150,9 @@ module.exports = [
     "type": "section",
     "items": [
       { "type": "heading", "defaultValue": "Module Options" },
-      { "type": "select", "messageKey": "TZOffset", "label": "Second Time Zone Offset",
-        "defaultValue": "0", "options": tzOffsetOptions() },
+      { "type": "select", "messageKey": "TZCity", "label": "Second Time Zone (City)",
+        "description": "Offset is computed on the phone with DST handled automatically",
+        "defaultValue": "Europe/London", "options": tzCityOptions() },
       { "type": "input", "messageKey": "TZLabel", "label": "Second Time Zone Label",
         "defaultValue": "TZ2", "attributes": { "placeholder": "e.g., LON", "maxlength": 6 } },
       { "type": "input", "messageKey": "CountdownDate", "label": "Countdown Target Date",
@@ -143,7 +171,15 @@ module.exports = [
         "defaultValue": "", "attributes": { "placeholder": "e.g., HELLO", "maxlength": 20 } },
       { "type": "input", "messageKey": "StepGoal", "label": "Daily Step Goal",
         "description": "Target for the Step Goal Ring module", "defaultValue": "10000",
-        "attributes": { "placeholder": "10000", "type": "number" } }
+        "attributes": { "placeholder": "10000", "type": "number" } },
+      { "type": "input", "messageKey": "CalendarUrl", "label": "Calendar ICS URL",
+        "description": "Public .ics feed URL for the Calendar module's next event",
+        "defaultValue": "", "attributes": { "placeholder": "https://.../basic.ics", "type": "url" } },
+      { "type": "input", "messageKey": "CryptoId", "label": "Crypto CoinGecko ID",
+        "description": "CoinGecko coin id for the Crypto Ticker module",
+        "defaultValue": "bitcoin", "attributes": { "placeholder": "e.g., bitcoin, ethereum" } },
+      { "type": "input", "messageKey": "CryptoLabel", "label": "Crypto Ticker Label",
+        "defaultValue": "BTC", "attributes": { "placeholder": "e.g., BTC", "maxlength": 5 } }
     ]
   },
   {
