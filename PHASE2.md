@@ -86,11 +86,5 @@ module shows "--".
 - [x] 2a.4 cell-size-aware fonts
 - [x] 2a.5 Clay settings (9 cells + module options + TZ/countdown/distance)
 - [x] 2a.6 emery 3×3 + basalt 2×2 verified in emulator; all 5 platforms build
-- [ ] Calendar real data source (follow-up — see caveat above)
-- [ ] 2b gabbro bespoke round renderer
-- [ ] 2a.2 cell model 4→9 + persistence
-- [ ] 2a.3 five new module types (render/layout/update)
-- [ ] 2a.4 cell-size-aware fonts
-- [ ] 2a.5 settings/AppMessage (Clay + JS) incl. calendar
-- [ ] 2a.6 build + emulator verification
-- [ ] 2b gabbro bespoke round renderer
+- [ ] Calendar real data source → moved to Phase 3d (ICS URL approach, see PHASE3.md)
+- [ ] 2b gabbro bespoke round renderer → moved to Phase 3b (shared with chalk, see PHASE3.md)
