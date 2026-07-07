@@ -52,13 +52,26 @@ var MODULE_OPTIONS = [
 var CELL_DEFAULTS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 var BG_DEFAULTS = [false, true, true, false, true, false, false, true, false];
 
+// Which platforms actually render a cell: 1-4 everywhere, 5 also on the round
+// watches and emery, 6-9 only on the 9-slot platforms (emery 3x3, gabbro ring).
+// Clay ANDs capabilities, so unused cells are expressed as platform exclusions;
+// excluded items are neither shown nor sent, keeping the settings message small.
+var CELL5_CAPS = ["NOT_PLATFORM_APLITE", "NOT_PLATFORM_BASALT",
+                  "NOT_PLATFORM_DIORITE", "NOT_PLATFORM_FLINT"];
+function cellCapabilities(i) {
+  if (i <= 4) return [];
+  if (i === 5) return CELL5_CAPS;
+  return CELL5_CAPS.concat(["NOT_PLATFORM_CHALK"]);
+}
+
 function moduleSelects() {
   var items = [{
     "type": "watchPreview"
   }, {
     "type": "text",
-    "defaultValue": "Cells 1-4 are used on every watch (2x2). Cells 5-9 add the extra " +
-      "cells on the Pebble Time 2 / emery 3x3 grid."
+    "id": "layoutHelp",
+    "defaultValue": "Cells 1-4 fill the 2x2 grid. Cells 5-9 appear on watches with " +
+      "more slots (emery 3x3; round watches use a center pod plus a ring)."
   }];
   for (var i = 1; i <= 9; i++) {
     items.push({
@@ -66,7 +79,8 @@ function moduleSelects() {
       "messageKey": "Quadrant" + i + "Module",
       "label": "Cell " + i,
       "defaultValue": CELL_DEFAULTS[i - 1],
-      "options": MODULE_OPTIONS
+      "options": MODULE_OPTIONS,
+      "capabilities": cellCapabilities(i)
     });
   }
   return items;
@@ -83,7 +97,8 @@ function colorControls() {
       "messageKey": "Quadrant" + i + "Background",
       "label": "Cell " + i + " - Background",
       "description": "Enable custom background",
-      "defaultValue": BG_DEFAULTS[i - 1]
+      "defaultValue": BG_DEFAULTS[i - 1],
+      "capabilities": cellCapabilities(i)
     });
     items.push({
       "type": "color",
@@ -92,7 +107,7 @@ function colorControls() {
       "defaultValue": "0xAAAAAA",
       "sunlight": false,
       "allowGray": true,
-      "capabilities": ["COLOR"]
+      "capabilities": cellCapabilities(i).concat(["COLOR"])
     });
     items.push({
       "type": "toggle",
@@ -100,7 +115,7 @@ function colorControls() {
       "label": "Cell " + i + " - Auto Text Color",
       "description": "Automatically choose white/black text based on background",
       "defaultValue": true,
-      "capabilities": ["COLOR"]
+      "capabilities": cellCapabilities(i).concat(["COLOR"])
     });
     items.push({
       "type": "color",
@@ -110,7 +125,7 @@ function colorControls() {
       "defaultValue": "0x000000",
       "sunlight": false,
       "allowGray": true,
-      "capabilities": ["COLOR"]
+      "capabilities": cellCapabilities(i).concat(["COLOR"])
     });
   }
   return items;
@@ -156,7 +171,7 @@ module.exports = [
         "description": "Use phone's GPS for weather location", "defaultValue": true },
       { "type": "input", "messageKey": "ZipCode", "defaultValue": "", "label": "ZIP Code / City",
         "description": "Enter ZIP code or city name (used when GPS is off)",
-        "attributes": { "placeholder": "e.g., 90210 or London" } }
+        "attributes": { "placeholder": "e.g., 90210 or London", "maxlength": 40 } }
     ]
   },
   {
@@ -191,10 +206,10 @@ module.exports = [
         "attributes": { "placeholder": "10000", "type": "number" } },
       { "type": "input", "messageKey": "CalendarUrl", "label": "Calendar ICS URL",
         "description": "Public .ics feed URL for the Calendar module's next event",
-        "defaultValue": "", "attributes": { "placeholder": "https://.../basic.ics", "type": "url" } },
+        "defaultValue": "", "attributes": { "placeholder": "https://.../basic.ics", "type": "url", "maxlength": 400 } },
       { "type": "input", "messageKey": "CryptoId", "label": "Crypto CoinGecko ID",
         "description": "CoinGecko coin id for the Crypto Ticker module",
-        "defaultValue": "bitcoin", "attributes": { "placeholder": "e.g., bitcoin, ethereum" } },
+        "defaultValue": "bitcoin", "attributes": { "placeholder": "e.g., bitcoin, ethereum", "maxlength": 40 } },
       { "type": "input", "messageKey": "CryptoLabel", "label": "Crypto Ticker Label",
         "defaultValue": "BTC", "attributes": { "placeholder": "e.g., BTC", "maxlength": 5 } }
     ]

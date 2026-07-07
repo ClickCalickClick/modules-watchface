@@ -923,6 +923,23 @@ static ModuleType sanitize_module(int value) {
   return (value > MODULE_EMPTY && value < NUM_MODULE_TYPES) ? (ModuleType)value : MODULE_EMPTY;
 }
 
+// Integer value of a tuple regardless of wire type. Clay select components
+// serialize their value as a string (e.g. "12"), while send-app-message and
+// toggles arrive as int32, so both encodings must be accepted.
+static int tuple_to_int(const Tuple *t) {
+  if (t->type == TUPLE_CSTRING) {
+    int v = 0;
+    bool neg = false;
+    const char *p = t->value->cstring;
+    if (*p == '-') { neg = true; p++; }
+    for (; *p >= '0' && *p <= '9'; p++) {
+      v = v * 10 + (*p - '0');
+    }
+    return neg ? -v : v;
+  }
+  return (int)t->value->int32;
+}
+
 // Background layer update procedure
 static void background_layer_update_proc(Layer *layer, GContext *ctx) {
 #ifdef ROUND_LAYOUT
@@ -1748,7 +1765,7 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
 
   Tuple *temp_unit_tuple = dict_find(iterator, MESSAGE_KEY_TemperatureUnit);
   if (temp_unit_tuple) {
-    s_use_celsius = temp_unit_tuple->value->int32 == 1;
+    s_use_celsius = tuple_to_int(temp_unit_tuple) == 1;
     if (s_has_temperature) {
       snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d\xC2\xB0%c",
                s_current_temperature, s_use_celsius ? 'C' : 'F');
@@ -1840,7 +1857,7 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   for (int i = 0; i < NUM_CELLS; i++) {
     Tuple *t = dict_find(iterator, K_MODULE[i]);
     if (t) {
-      ModuleType m = sanitize_module((int)t->value->int32);
+      ModuleType m = sanitize_module(tuple_to_int(t));
       if (s_quadrant_modules[i] != m) {
         s_quadrant_modules[i] = m;
         persist_write_int(PERSIST_MODULE_BASE + i, m);
@@ -1850,7 +1867,7 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
 
     Tuple *bg = dict_find(iterator, K_BG[i]);
     if (bg) {
-      bool new_bg = bg->value->int32 == 1;
+      bool new_bg = tuple_to_int(bg) == 1;
       if (s_quadrant_backgrounds[i] != new_bg) {
         s_quadrant_backgrounds[i] = new_bg;
         persist_write_bool(PERSIST_BG_BASE + i, new_bg);
@@ -1870,7 +1887,7 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
     }
     Tuple *at = dict_find(iterator, K_AUTOTEXT[i]);
     if (at) {
-      s_auto_text_color[i] = (at->value->int32 == 1);
+      s_auto_text_color[i] = (tuple_to_int(at) == 1);
       persist_write_bool(PERSIST_AUTOTEXT_BASE + i, s_auto_text_color[i]);
       cell_changed[i] = true;
     }
@@ -1917,13 +1934,13 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   }
   Tuple *dist_u = dict_find(iterator, MESSAGE_KEY_DistanceUnits);
   if (dist_u) {
-    s_dist_use_km = (dist_u->value->int32 == 1);
+    s_dist_use_km = (tuple_to_int(dist_u) == 1);
     persist_write_int(PERSIST_DIST_UNITS, s_dist_use_km ? 1 : 0);
     update_distance();
   }
   Tuple *bt_vibe = dict_find(iterator, MESSAGE_KEY_BluetoothVibe);
   if (bt_vibe) {
-    s_bt_vibe = (bt_vibe->value->int32 == 1);
+    s_bt_vibe = (tuple_to_int(bt_vibe) == 1);
     persist_write_bool(PERSIST_BT_VIBE, s_bt_vibe);
   }
   Tuple *cu_date = dict_find(iterator, MESSAGE_KEY_CountupDate);
@@ -2135,7 +2152,11 @@ static void init() {
   app_message_register_inbox_received(inbox_received_callback);
   app_message_register_inbox_dropped(inbox_dropped_callback);
   app_message_register_outbox_failed(outbox_failed_callback);
-  app_message_open(512, 512);
+  // Clay sends every setting in one dictionary (~60 tuples incl. free-text
+  // strings like the calendar URL), which overflows a 512-byte inbox and the
+  // whole save gets dropped. 2048 covers it with room to spare; the outbox
+  // only ever carries the single-tuple refresh request.
+  app_message_open(2048, 64);
 }
 
 // Deinit

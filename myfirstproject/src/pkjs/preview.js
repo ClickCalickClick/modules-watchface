@@ -23,8 +23,14 @@ var MODULE_ABBR = {
   '12': 'RING', '13': 'SLEEP', '14': 'KCAL', '15': 'ACTV', '16': 'MOON',
   '17': 'DOY', '18': 'CNTUP', '19': 'TEXT', '20': 'QUIET', '21': 'CLOCK',
   '22': 'SUN', '23': 'HI/LO', '24': 'HUM', '25': 'WIND', '26': 'UV',
-  '27': 'AQI', '28': 'BTC'
+  '27': 'AQI', '28': 'CRYP'
 };
+
+// Watch-side default module assignment for round layouts (Time in the center
+// pod, then Date/Weather/Week/Distance/... clockwise) — mirrors the round
+// s_quadrant_modules defaults in modules.c. Grid platforms use the config's
+// own CELL_DEFAULTS, which already match the C grid defaults.
+var ROUND_MODULE_DEFAULTS = ['3', '1', '2', '6', '8', '4', '7', '9', '5'];
 
 function platformModel(platform) {
   return PLATFORMS[platform] || PLATFORMS.basalt;
@@ -203,6 +209,30 @@ var component = {
   defaults: {}
 };
 
+// Cell-numbering explainer for the active platform, shown above the dropdowns.
+function layoutHelpText(platform) {
+  var m = platformModel(platform);
+  if (m.round) {
+    return 'Round layout: Cell 1 is the center pod; cells 2-' + (1 + m.ring) +
+      ' go clockwise around the ring, starting at the top.';
+  }
+  return m.cols + 'x' + m.rows + ' grid: cells 1-' + (m.cols * m.rows) +
+    ' run left to right, top to bottom.';
+}
+
+// On round watches, if the user has never saved settings, preload the module
+// dropdowns with the watch's own round defaults so the first save doesn't
+// silently swap the center pod from Time to Date.
+function applyRoundDefaults(clayConfig, platform, savedSettings) {
+  if (!platformModel(platform).round) return false;
+  if (savedSettings && typeof savedSettings.Quadrant1Module !== 'undefined') return false;
+  for (var i = 1; i <= 9; i++) {
+    var it = clayConfig.getItemByMessageKey('Quadrant' + i + 'Module');
+    if (it && typeof it.set === 'function') { it.set(ROUND_MODULE_DEFAULTS[i - 1]); }
+  }
+  return true;
+}
+
 function getVal(clayConfig, key, dflt) {
   var it = clayConfig.getItemByMessageKey(key);
   return (it && typeof it.get === 'function') ? it.get() : dflt;
@@ -228,6 +258,14 @@ function attach(clayConfig, minified) {
   clayConfig.on(clayConfig.EVENTS.AFTER_BUILD, function() {
     var awi = clayConfig.meta && clayConfig.meta.activeWatchInfo;
     var platform = (awi && awi.platform) || 'basalt';
+
+    // Platform-aware touches beyond the preview itself: cell-numbering help
+    // text and (round watches, first run) the watch's own module defaults.
+    var help = clayConfig.getItemById && clayConfig.getItemById('layoutHelp');
+    if (help && typeof help.set === 'function') { help.set(layoutHelpText(platform)); }
+    var saved = (typeof window !== 'undefined') ? window.claySettings : null;
+    applyRoundDefaults(clayConfig, platform, saved);
+
     var previews = clayConfig.getItemsByType('watchPreview');
     if (!previews.length) return;
 
@@ -258,6 +296,8 @@ module.exports = {
   _test: {
     PLATFORMS: PLATFORMS, MODULE_ABBR: MODULE_ABBR, cellCount: cellCount,
     parseColor: parseColor, brightness: brightness, resolveColors: resolveColors,
-    cellRects: cellRects, platformModel: platformModel
+    cellRects: cellRects, platformModel: platformModel,
+    ROUND_MODULE_DEFAULTS: ROUND_MODULE_DEFAULTS,
+    layoutHelpText: layoutHelpText, applyRoundDefaults: applyRoundDefaults
   }
 };
