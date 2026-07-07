@@ -2,10 +2,12 @@
   "name": "modules-watchface",
   "author": "ClickCalickClick",
   "version": "1.0.0",
-  "keywords": ["pebble-app"],
+  "keywords": [
+    "pebble-app"
+  ],
   "private": true,
   "dependencies": {
-    "pebble-clay": "^1.0.4"
+    "@rebble/clay": "^1.0.10"
   },
   "pebble": {
     "displayName": "Modules",
@@ -13,10 +15,13 @@
     "sdkVersion": "3",
     "enableMultiJS": true,
     "targetPlatforms": [
-       "aplite",
+      "aplite",
       "basalt",
       "diorite",
-      "emery"
+      "emery",
+      "flint",
+      "chalk",
+      "gabbro"
     ],
     "watchapp": {
       "watchface": true
@@ -47,7 +52,57 @@
       "Quadrant1TextColor",
       "Quadrant2TextColor",
       "Quadrant3TextColor",
-      "Quadrant4TextColor"
+      "Quadrant4TextColor",
+      "Quadrant5Module",
+      "Quadrant6Module",
+      "Quadrant7Module",
+      "Quadrant8Module",
+      "Quadrant9Module",
+      "Quadrant5Background",
+      "Quadrant6Background",
+      "Quadrant7Background",
+      "Quadrant8Background",
+      "Quadrant9Background",
+      "Quadrant5Color",
+      "Quadrant6Color",
+      "Quadrant7Color",
+      "Quadrant8Color",
+      "Quadrant9Color",
+      "Quadrant5AutoTextColor",
+      "Quadrant6AutoTextColor",
+      "Quadrant7AutoTextColor",
+      "Quadrant8AutoTextColor",
+      "Quadrant9AutoTextColor",
+      "Quadrant5TextColor",
+      "Quadrant6TextColor",
+      "Quadrant7TextColor",
+      "Quadrant8TextColor",
+      "Quadrant9TextColor",
+      "TZOffset",
+      "TZLabel",
+      "CountdownDate",
+      "CountdownLabel",
+      "DistanceUnits",
+      "CalendarTitle",
+      "CalendarTime",
+      "BluetoothVibe",
+      "CountupDate",
+      "CountupLabel",
+      "CustomText",
+      "StepGoal",
+      "WeatherHigh",
+      "WeatherLow",
+      "Humidity",
+      "Wind",
+      "UV",
+      "AQI",
+      "SunriseMin",
+      "SunsetMin",
+      "CalendarUrl",
+      "TZCity",
+      "CryptoId",
+      "CryptoLabel",
+      "CryptoPrice"
     ],
     "resources": {
       "media": [

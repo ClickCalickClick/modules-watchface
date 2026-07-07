@@ -1,0 +1,23 @@
+Weather and battery icons in this directory are derived from Material Design Icons
+(Pictogrammers — https://pictogrammers.com/library/mdi/), licensed under the
+Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0).
+
+Each icon was rendered from the upstream SVG to a white-fill + black-outline raster
+at the size required by each Pebble platform (base 144x168 platforms, plus larger
+"~emery" variants for the Pebble Time 2 / emery 200x228 display).
+
+Icon mapping (resource -> MDI source):
+  Sunny-day            weather-sunny
+  Partly-cloudy        weather-partly-cloudy
+  Cloudy-weather       weather-cloudy
+  Light-rain           weather-rainy
+  Heavy-rain           weather-pouring
+  Light-snow           weather-snowy
+  Heavy-snow           weather-snowy-heavy
+  Raining-and-snowing  weather-snowy-rainy
+  Generic-weather      weather-hazy
+  battery-empty        battery-outline
+  battery-low          battery-20
+  battery-medium       battery-50
+  battery-full         battery
+  battery-charging     battery-charging
