@@ -3,11 +3,13 @@
 var Clay = require('@rebble/clay');
 var clayConfig = require('./config');
 var preview = require('./preview');
-// customFn runs in the config page (this === ClayConfig): register + wire the
-// live preview component. Clay still auto-handles settings persistence/sending.
-var clay = new Clay(clayConfig, function(minified) {
-  preview.attach(this, minified);
-});
+// Register the live-preview component on the Clay INSTANCE so Clay serializes it
+// into the config page (window.clayComponents) and the webview can build the
+// `watchPreview` item. All of the component's webview logic lives inside the
+// component itself (see preview.js) — no customFn referencing this module scope,
+// which would throw ReferenceError in the webview and blank the settings screen.
+var clay = new Clay(clayConfig);
+clay.registerComponent(preview.component);
 
 var WEATHER_API_KEY = '680df99f9c264bde83a142148250811';
 // forecast.json (1 day, aqi=yes) returns current conditions + today's hi/lo +
