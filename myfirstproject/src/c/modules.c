@@ -34,6 +34,7 @@ typedef enum {
 #define PERSIST_KEY_Q3_TEXT_COLOR 118
 #define PERSIST_KEY_Q4_TEXT_COLOR 119
 #define PERSIST_KEY_ALT_WEATHER_LAYOUT 120
+#define PERSIST_KEY_USE_CELSIUS 121
 
 // UI Elements
 static Window *s_main_window;
@@ -722,7 +723,6 @@ static const char* get_single_word_condition(const char* condition) {
 
 // Tick handler
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "=== TICK HANDLER CALLED ===");
   update_time();
   
   // Update weather every 30 minutes
@@ -731,7 +731,6 @@ static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
     app_message_outbox_begin(&iter);
     dict_write_uint8(iter, MESSAGE_KEY_Temperature, 1);
     app_message_outbox_send();
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Weather update request sent");
   }
 }
 
@@ -784,6 +783,20 @@ static uint32_t get_resource_id_for_weather_icon(int icon_id) {
   }
 }
 
+// Show the stored Fahrenheit temperature in the user's chosen unit
+static void update_temperature_display() {
+  int display_temp = s_current_temperature;
+  char unit = 'F';
+  if (s_use_celsius) {
+    // Convert Fahrenheit to Celsius, rounding to the nearest degree
+    int scaled = (s_current_temperature - 32) * 5;
+    display_temp = (scaled >= 0 ? scaled + 4 : scaled - 4) / 9;
+    unit = 'C';
+  }
+  snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", display_temp, unit);
+  text_layer_set_text(s_temperature_layer, s_temperature_buffer);
+}
+
 // Inbox received callback
 static void inbox_received_callback(DictionaryIterator *iterator, void *context) {
   APP_LOG(APP_LOG_LEVEL_DEBUG, "=== inbox_received_callback START ===");
@@ -797,29 +810,7 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature (Fahrenheit): %d", (int)temp_tuple->value->int32);
     s_current_temperature = (int)temp_tuple->value->int32;
     s_has_temperature = true;
-    
-    // Display temperature with unit conversion if needed
-    int display_temp = s_current_temperature;
-    char unit = 'F';
-    if (s_use_celsius) {
-    
-    // Display temperature immediately with current s_use_celsius setting
-    int display_temp = s_current_temperature;
-    char unit = 'F';
-    if (s_use_celsius) {
-      display_temp = (s_current_temperature - 32) * 5 / 9;
-      unit = 'C';
-    }
-    snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", display_temp, unit);
-    text_layer_set_text(s_temperature_layer, s_temperature_buffer);
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature updated: %d°%c (use_celsius=%d)", display_temp, unit, s_use_celsius);
-      // Convert Fahrenheit to Celsius: (F - 32) * 5 / 9
-      display_temp = (s_current_temperature - 32) * 5 / 9;
-      unit = 'C';
-    }
-    
-    snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", display_temp, unit);
-    text_layer_set_text(s_temperature_layer, s_temperature_buffer);
+    update_temperature_display();
   } else {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Temperature tuple not found");
   }
@@ -856,20 +847,12 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
     s_use_celsius = temp_unit_tuple->value->int32 == 1;
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Received TemperatureUnit: %d, setting s_use_celsius to: %d", (int)temp_unit_tuple->value->int32, s_use_celsius);
     // Persist this setting so it survives app restarts
-    persist_write_bool(1, s_use_celsius);
+    persist_write_bool(PERSIST_KEY_USE_CELSIUS, s_use_celsius);
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Persisted s_use_celsius: %d", s_use_celsius);
     
     // If we have temperature data, update display with conversion
     if (s_has_temperature) {
-      int display_temp = s_current_temperature;
-      char unit = 'F';
-      if (s_use_celsius) {
-        // Convert Fahrenheit to Celsius: (F - 32) * 5 / 9
-        display_temp = (s_current_temperature - 32) * 5 / 9;
-        unit = 'C';
-      }
-      snprintf(s_temperature_buffer, sizeof(s_temperature_buffer), "%d°%c", display_temp, unit);
-      text_layer_set_text(s_temperature_layer, s_temperature_buffer);
+      update_temperature_display();
     }
   }
   
@@ -1342,8 +1325,8 @@ static void init() {
 #endif
   
   // Load persisted settings from storage
-  if (persist_exists(1)) {
-    s_use_celsius = persist_read_bool(1);
+  if (persist_exists(PERSIST_KEY_USE_CELSIUS)) {
+    s_use_celsius = persist_read_bool(PERSIST_KEY_USE_CELSIUS);
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Loaded persisted s_use_celsius: %d", s_use_celsius);
   }
   

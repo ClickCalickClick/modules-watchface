@@ -14,12 +14,8 @@ console.log('MessageKeys loaded: ' + JSON.stringify(MessageKeys));
 var globalSettings = {};
 try {
   var stored = localStorage.getItem('clay-settings');
-  console.log('RAW localStorage clay-settings: ' + stored);
   if (stored) {
     globalSettings = JSON.parse(stored);
-    console.log('Loaded settings from localStorage: ' + JSON.stringify(globalSettings));
-  } else {
-    console.log('WARNING: clay-settings is null/empty in localStorage');
   }
 } catch (err) {
   console.log('Failed to load settings from localStorage: ' + err);
@@ -38,6 +34,13 @@ function getBool(settings, key, defaultValue) {
     if (lower === 'false') return false;
   }
   return !!v;
+}
+
+// True when the user has actually saved a value for this setting. Used to
+// avoid overwriting the watch's persisted value with a phone-side default
+// (e.g. after the phone's localStorage has been cleared).
+function hasSetting(settings, key) {
+  return !!settings && settings[key] !== undefined && settings[key] !== null;
 }
 
 function getString(settings, key, defaultValue) {
@@ -162,13 +165,11 @@ function fetchWeather(location) {
         dictionary[MessageKeys.Temperature] = Math.round(tempFahrenheit);
         dictionary[MessageKeys.Condition] = condition;
         dictionary[MessageKeys.WeatherIcon] = iconCode;
-        // Also send the temperature unit setting so watch can convert properly
-        var tempUnitValue = getBool(currentSettings, 'TemperatureUnit', false) ? 1 : 0;
-        dictionary[MessageKeys.TemperatureUnit] = tempUnitValue;
-        console.log('Current settings: ' + JSON.stringify(currentSettings));
-        console.log('getBool result: ' + getBool(globalSettings, 'TemperatureUnit', false));
-        console.log('TemperatureUnit value to send: ' + tempUnitValue);
-        console.log('Full dictionary: ' + JSON.stringify(dictionary));
+        // Also send the temperature unit setting (if the user has saved one)
+        // so watch can convert properly
+        if (hasSetting(currentSettings, 'TemperatureUnit')) {
+          dictionary[MessageKeys.TemperatureUnit] = getBool(currentSettings, 'TemperatureUnit', false) ? 1 : 0;
+        }
         
         console.log('Dictionary keys: ' + Object.keys(dictionary).join(', '));
         console.log('Dictionary values: ' + JSON.stringify(dictionary));
@@ -220,11 +221,8 @@ function locationError(err) {
 
 function getWeather() {
   var stored = localStorage.getItem("clay-settings");
-  console.log("RAW localStorage value: " + stored);
   var currentSettings = stored ? JSON.parse(stored) : {};
-  console.log("Parsed currentSettings: " + JSON.stringify(currentSettings).substring(0, 200));
   var useCelsius = getBool(currentSettings, "TemperatureUnit", false);
-  console.log("useCelsius read from localStorage: " + useCelsius);
   var useGPS = getBool(currentSettings, 'UseGPS', true); // Default to true
   var zipCode = getString(currentSettings, 'ZipCode', '');
   
@@ -252,15 +250,18 @@ function getWeather() {
 Pebble.addEventListener('ready', function() {
   console.log('PebbleKit JS ready!');
   
-  // Send current settings to watch immediately so it uses correct temperature unit
-  var settingsDict = {};
-  settingsDict[MessageKeys.TemperatureUnit] = getBool(globalSettings, 'TemperatureUnit', false) ? 1 : 0;
-  console.log('Sending initial TemperatureUnit setting: ' + settingsDict[MessageKeys.TemperatureUnit]);
-  Pebble.sendAppMessage(settingsDict, function() {
-    console.log('Initial settings sent');
-  }, function(e) {
-    console.log('Failed to send initial settings: ' + JSON.stringify(e));
-  });
+  // Send the saved temperature unit to the watch immediately. If the phone has
+  // no saved value, leave the watch's persisted setting alone.
+  if (hasSetting(globalSettings, 'TemperatureUnit')) {
+    var settingsDict = {};
+    settingsDict[MessageKeys.TemperatureUnit] = getBool(globalSettings, 'TemperatureUnit', false) ? 1 : 0;
+    console.log('Sending initial TemperatureUnit setting: ' + settingsDict[MessageKeys.TemperatureUnit]);
+    Pebble.sendAppMessage(settingsDict, function() {
+      console.log('Initial settings sent');
+    }, function(e) {
+      console.log('Failed to send initial settings: ' + JSON.stringify(e));
+    });
+  }
   
   // Get initial weather
   getWeather();
@@ -278,10 +279,7 @@ Pebble.addEventListener('appmessage', function(e) {
 
 // Listen for when settings are saved
 Pebble.addEventListener('webviewclosed', function(e) {
-  console.log('=== webviewclosed event fired ===');
-  console.log('Event response: ' + (e ? JSON.stringify(e.response).substring(0, 200) : 'no response'));
   if (e && !e.response) {
-    console.log('No response, returning');
     return;
   }
   
@@ -297,22 +295,11 @@ Pebble.addEventListener('webviewclosed', function(e) {
     }
   }
   globalSettings = flatSettings;  // Update global state with flattened format
-  console.log('Settings received and updated globally (flattened): ' + JSON.stringify(globalSettings).substring(0, 200));
-  console.log('globalSettings.TemperatureUnit: ' + globalSettings.TemperatureUnit);
   
-  // Persist the latest settings so periodic updates use the correct values
-  // Flatten settings before storing (Clay stores with .value, but we need flattened format)
-  var flatSettings = {};
-  for (var key in settings) {
-    if (settings[key] && typeof settings[key] === 'object' && 'value' in settings[key]) {
-      flatSettings[key] = settings[key].value;
-    } else {
-      flatSettings[key] = settings[key];
-    }
-  }
+  // Persist the latest settings (same flattened format Clay uses) so
+  // periodic weather updates use the correct values
   try {
     localStorage.setItem('clay-settings', JSON.stringify(flatSettings));
-    console.log('Settings persisted to localStorage (flattened): ' + JSON.stringify(flatSettings).substring(0, 100));
   } catch (err) {
     console.log('Failed to persist settings: ' + err);
   }
