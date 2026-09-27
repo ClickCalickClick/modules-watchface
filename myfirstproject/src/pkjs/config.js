@@ -112,7 +112,7 @@ module.exports = [
         "type": "text",
         "defaultValue": function(config) {
           var platform = config.platform;
-          if (platform && (platform === 'basalt' || platform === 'chalk' || platform === 'diorite' || platform === 'emery')) {
+          if (platform && (platform === 'basalt' || platform === 'chalk' || platform === 'diorite' || platform === 'emery' || platform === 'gabbro')) {
             return "Enable background colors for each quadrant. Choose custom colors below.";
           }
           return "Enable light gray background for each quadrant (off = white).";

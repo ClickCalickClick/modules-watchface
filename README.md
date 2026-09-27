@@ -162,7 +162,7 @@ Each quadrant has a dropdown selector:
 
 ### Background Customization
 
-#### For Color Pebbles (Basalt, Chalk, Diorite, Emery)
+#### For Color Pebbles (Basalt, Emery, Gabbro)
 
 Each quadrant offers:
 - **Enable Background**: Toggle to enable/disable custom coloring
@@ -170,7 +170,7 @@ Each quadrant offers:
 - **Auto Text Color**: Automatically selects black or white text based on background brightness
 - **Custom Text Color**: Manual color selection (when Auto is disabled)
 
-#### For Monochrome Pebbles (Aplite)
+#### For Monochrome Pebbles (Aplite, Diorite, Flint)
 
 - **Enable Background**: Toggle between white and light gray (dithered pattern)
 - Font sizes automatically adjust for better readability on dithered backgrounds
@@ -213,9 +213,9 @@ Each quadrant offers:
 | **Aplite** (Pebble Classic, Steel) | 144×168 | B&W | ❌ | ✅ Supported |
 | **Basalt** (Pebble Time, Time Steel) | 144×168 | 64 colors | ✅ | ✅ Supported |
 | **Diorite** (Pebble 2) | 144×168 | B&W | ✅ | ✅ Supported |
-| **Emery** (Pebble Time 2*) | 200×228 | 64 colors | ✅ | ✅ Supported |
-
-*\*Pebble Time 2 was never released publicly but is supported for development/emulation*
+| **Emery** (Pebble Time 2) | 200×228 | 64 colors | ✅ | ✅ Supported (larger fonts & icons) |
+| **Flint** (Pebble 2 Duo) | 144×168 | B&W | ✅ | ✅ Supported |
+| **Gabbro** (Pebble Round 2) | 260×260 round | 64 colors | ✅ | ✅ Supported (grid fitted inside the circle) |
 
 ---
 
@@ -275,7 +275,7 @@ myfirstproject/
 ### Key Technologies
 
 - **Pebble SDK 3.0**: Core watchface development
-- **Pebble Clay**: Configuration framework for settings UI
+- **Rebble Clay** (`@rebble/clay`): Configuration framework for settings UI
 - **WeatherAPI.com**: Real-time weather data provider
 - **AppMessage**: Pebble ↔ Phone communication protocol
 
@@ -319,7 +319,7 @@ This project is open source and available under the [MIT License](LICENSE).
 
 - **[Rebble Alliance](https://rebble.io/)** - For keeping the Pebble dream alive
 - **[WeatherAPI.com](https://www.weatherapi.com/)** - Weather data provider
-- **[Pebble Clay](https://github.com/pebble/clay)** - Configuration framework
+- **[Rebble Clay](https://github.com/pebble-dev/clay)** - Configuration framework
 - The entire **Pebble Community** - For years of innovation and support
 
 ---

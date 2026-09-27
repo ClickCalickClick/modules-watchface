@@ -107,13 +107,8 @@ static bool s_auto_text_color[4] = {
 // Custom text color for each quadrant (when auto is disabled)
 static GColor s_custom_text_color[4];
 
-// Quadrant origins (x, y)
-static const GPoint QUADRANT_ORIGINS[4] = {
-  {0, 0},     // Q1 - Top Left
-  {72, 0},    // Q2 - Top Right
-  {0, 84},    // Q3 - Bottom Left
-  {72, 84}    // Q4 - Bottom Right
-};
+// Screen bounds, captured when the main window loads
+static GRect s_bounds;
 
 #ifdef PBL_COLOR
 static inline uint8_t prv_expand_component(uint8_t value) {
@@ -158,6 +153,103 @@ static GColor get_text_color_for_quadrant(int quadrant) {
   return result;
 }
 
+// Per-platform layouts. All module positions are relative to the quadrant's
+// content box (see get_content_rect).
+#if defined(PBL_PLATFORM_EMERY)
+// Pebble Time 2 (200x228): 100x114 content boxes with larger fonts and icons
+
+#define FONT_DAY_NAME     FONT_KEY_GOTHIC_24_BOLD
+#define FONT_DAY_NUMBER   FONT_KEY_ROBOTO_BOLD_SUBSET_49
+#define FONT_MONTH_NAME   FONT_KEY_GOTHIC_24_BOLD
+#define FONT_TEMPERATURE  FONT_KEY_GOTHIC_28_BOLD
+#define FONT_CONDITION    FONT_KEY_GOTHIC_28_BOLD
+#define FONT_TIME         FONT_KEY_ROBOTO_BOLD_SUBSET_49
+#define FONT_BATTERY      FONT_KEY_GOTHIC_24_BOLD
+#define FONT_STEPS_COUNT  FONT_KEY_GOTHIC_28_BOLD
+#define FONT_STEPS_LABEL  FONT_KEY_GOTHIC_18
+
+static const GRect DATE_LAYOUTS[3] = {
+  {{0, 2}, {100, 30}},   // day name
+  {{0, 26}, {100, 58}},  // day number
+  {{0, 80}, {100, 30}}   // month name
+};
+
+static const GRect WEATHER_LAYOUTS[3] = {
+  {{30, 4}, {40, 40}},   // icon (centered: 100/2 - 40/2 = 30)
+  {{0, 42}, {100, 34}},  // temperature
+  {{0, 74}, {100, 34}}   // condition
+};
+
+static const GRect TIME_LAYOUTS[] = {
+  {{0, -6}, {100, 57}},  // Hour label
+  {{0, 48}, {100, 57}}   // Minute label
+};
+
+static const GRect STATS_LAYOUTS[5] = {
+  {{14, 12}, {22, 22}},  // battery icon
+  {{38, 6}, {62, 30}},   // battery text (offset from icon)
+  {{0, 48}, {100, 34}},  // steps count
+  {{0, 82}, {100, 24}}   // steps label
+};
+
+// Divider under the battery row: y offset and horizontal inset
+#define STATS_DIVIDER_Y 44
+#define STATS_DIVIDER_INSET 8
+
+#elif defined(PBL_ROUND)
+// Pebble Round 2 (260x260): the grid is laid out on the square inscribed in
+// the circle so no content is clipped. Each content box is 92x92.
+
+#define FONT_DAY_NAME     FONT_KEY_GOTHIC_18_BOLD
+#define FONT_DAY_NUMBER   FONT_KEY_BITHAM_42_BOLD
+#define FONT_MONTH_NAME   FONT_KEY_GOTHIC_18_BOLD
+#define FONT_TEMPERATURE  FONT_KEY_GOTHIC_28_BOLD
+#define FONT_CONDITION    FONT_KEY_GOTHIC_24_BOLD
+#define FONT_TIME         FONT_KEY_BITHAM_42_BOLD
+#define FONT_BATTERY      FONT_KEY_GOTHIC_18_BOLD
+#define FONT_STEPS_COUNT  FONT_KEY_GOTHIC_24_BOLD
+#define FONT_STEPS_LABEL  FONT_KEY_GOTHIC_14
+
+static const GRect DATE_LAYOUTS[3] = {
+  {{0, 2}, {92, 24}},    // day name
+  {{0, 20}, {92, 50}},   // day number
+  {{0, 68}, {92, 24}}    // month name
+};
+
+static const GRect WEATHER_LAYOUTS[3] = {
+  {{32, 6}, {28, 28}},   // icon (centered: 92/2 - 28/2 = 32)
+  {{0, 34}, {92, 32}},   // temperature
+  {{0, 60}, {92, 30}}    // condition
+};
+
+static const GRect TIME_LAYOUTS[] = {
+  {{0, 2}, {92, 46}},    // Hour label
+  {{0, 42}, {92, 50}}    // Minute label
+};
+
+static const GRect STATS_LAYOUTS[5] = {
+  {{22, 14}, {16, 16}},  // battery icon
+  {{40, 13}, {52, 24}},  // battery text (offset from icon)
+  {{0, 40}, {92, 30}},   // steps count
+  {{0, 66}, {92, 20}}    // steps label
+};
+
+#define STATS_DIVIDER_Y 38
+#define STATS_DIVIDER_INSET 10
+
+#else
+// Pebble Classic / Time / Time Steel / 2 / 2 Duo (144x168): 72x84 quadrants
+
+#define FONT_DAY_NAME     FONT_KEY_GOTHIC_14
+#define FONT_DAY_NUMBER   FONT_KEY_BITHAM_42_BOLD
+#define FONT_MONTH_NAME   FONT_KEY_GOTHIC_14
+#define FONT_TEMPERATURE  FONT_KEY_GOTHIC_28_BOLD
+#define FONT_CONDITION    FONT_KEY_GOTHIC_24_BOLD
+#define FONT_TIME         FONT_KEY_BITHAM_42_BOLD
+#define FONT_BATTERY      FONT_KEY_GOTHIC_18_BOLD
+#define FONT_STEPS_COUNT  FONT_KEY_GOTHIC_24_BOLD
+#define FONT_STEPS_LABEL  FONT_KEY_GOTHIC_14
+
 // Relative positions for DATE module (relative to quadrant origin)
 static const GRect DATE_LAYOUTS[3] = {
   {{0, 0}, {72, 20}},   // day name (increased height for GOTHIC_18_BOLD)
@@ -187,11 +279,35 @@ static const GRect STATS_LAYOUTS[5] = {
   {{0, 60}, {72, 76}}    // steps label
 };
 
+#define STATS_DIVIDER_Y 32
+#define STATS_DIVIDER_INSET 6
+
+#endif
+
+// Full screen area of a quadrant (Q1 top left .. Q4 bottom right)
+static GRect get_quadrant_rect(int quadrant) {
+  int16_t half_w = s_bounds.size.w / 2;
+  int16_t half_h = s_bounds.size.h / 2;
+  return GRect((quadrant % 2) * half_w, (quadrant / 2) * half_h, half_w, half_h);
+}
+
+// Area of a quadrant that module content is laid out in
+static GRect get_content_rect(int quadrant) {
+#if defined(PBL_ROUND)
+  // Quadrant of the square inscribed in the circular display
+  int16_t side = s_bounds.size.w * 71 / 100;
+  int16_t inset = (s_bounds.size.w - side) / 2;
+  return GRect(inset + (quadrant % 2) * (side / 2), inset + (quadrant / 2) * (side / 2),
+               side / 2, side / 2);
+#else
+  return get_quadrant_rect(quadrant);
+#endif
+}
+
 // Background layer update procedure
 static void background_layer_update_proc(Layer *layer, GContext *ctx) {
   // Fill quadrant backgrounds based on settings
   for (int q = 0; q < 4; q++) {
-    GPoint origin = QUADRANT_ORIGINS[q];
     GColor color;
     
 #ifdef PBL_COLOR
@@ -203,24 +319,29 @@ static void background_layer_update_proc(Layer *layer, GContext *ctx) {
 #endif
     
     graphics_context_set_fill_color(ctx, color);
-    graphics_fill_rect(ctx, GRect(origin.x, origin.y, 72, 84), 0, GCornerNone);
+    graphics_fill_rect(ctx, get_quadrant_rect(q), 0, GCornerNone);
   }
   
   // Draw grid lines
   graphics_context_set_stroke_color(ctx, GColorBlack);
   graphics_context_set_stroke_width(ctx, 1);
   
-  // Vertical line at x=72
-  graphics_draw_line(ctx, GPoint(72, 0), GPoint(72, 168));
+  int16_t mid_x = s_bounds.size.w / 2;
+  int16_t mid_y = s_bounds.size.h / 2;
   
-  // Horizontal line at y=84
-  graphics_draw_line(ctx, GPoint(0, 84), GPoint(144, 84));
+  // Vertical line through the center
+  graphics_draw_line(ctx, GPoint(mid_x, 0), GPoint(mid_x, s_bounds.size.h));
+  
+  // Horizontal line through the center
+  graphics_draw_line(ctx, GPoint(0, mid_y), GPoint(s_bounds.size.w, mid_y));
 }
-
-// Divider layer for Q4
+  
+// Divider layer for the STATS module
 static void divider_layer_update_proc(Layer *layer, GContext *ctx) {
+  GRect bounds = layer_get_bounds(layer);
   graphics_context_set_stroke_color(ctx, GColorBlack);
-  graphics_draw_line(ctx, GPoint(6, 32), GPoint(66, 32)); // Relative to layer position
+  graphics_draw_line(ctx, GPoint(STATS_DIVIDER_INSET, STATS_DIVIDER_Y),
+                     GPoint(bounds.size.w - STATS_DIVIDER_INSET, STATS_DIVIDER_Y)); // Relative to layer position
 }
 
 // Update fonts based on platform and background state
@@ -296,7 +417,8 @@ static void update_text_colors() {
 // Reposition layers based on module assignments
 static void reposition_layers() {
   for (int q = 0; q < 4; q++) {
-    GPoint origin = QUADRANT_ORIGINS[q];
+    GRect content = get_content_rect(q);
+    GPoint origin = content.origin;
     ModuleType module = s_quadrant_modules[q];
     
     switch (module) {
@@ -355,7 +477,7 @@ static void reposition_layers() {
           GRect(origin.x + STATS_LAYOUTS[3].origin.x, origin.y + STATS_LAYOUTS[3].origin.y,
                 STATS_LAYOUTS[3].size.w, STATS_LAYOUTS[3].size.h));
         layer_set_frame(s_divider_layer,
-          GRect(origin.x, origin.y, 72, 84));
+          content);
         layer_set_hidden(bitmap_layer_get_layer(s_battery_icon_layer), false);
         layer_set_hidden(text_layer_get_layer(s_battery_text_layer), false);
         layer_set_hidden(text_layer_get_layer(s_steps_count_layer), false);
@@ -429,7 +551,12 @@ static void update_time() {
   strftime(s_day_name_buffer, sizeof(s_day_name_buffer), "%a", tick_time);
   strftime(s_day_number_buffer, sizeof(s_day_number_buffer), "%e", tick_time);
   strftime(s_month_name_buffer, sizeof(s_month_name_buffer), "%b", tick_time);
-  
+
+  // Remove the leading space %e pads single-digit days with
+  if (s_day_number_buffer[0] == ' ') {
+    memmove(s_day_number_buffer, s_day_number_buffer + 1, sizeof(s_day_number_buffer) - 1);
+  }
+
   // Convert to uppercase
   for (int i = 0; s_day_name_buffer[i]; i++) {
     s_day_name_buffer[i] = toupper((unsigned char)s_day_name_buffer[i]);
@@ -895,10 +1022,10 @@ static void outbox_sent_callback(DictionaryIterator *iterator, void *context) {
 // Main window load
 static void main_window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
-  // GRect bounds = layer_get_bounds(window_layer);
+  s_bounds = layer_get_bounds(window_layer);
   
   // Create background layer
-  s_background_layer = layer_create(GRect(0, 0, 144, 168));
+  s_background_layer = layer_create(s_bounds);
   layer_set_update_proc(s_background_layer, background_layer_update_proc);
   layer_add_child(window_layer, s_background_layer);
   
@@ -906,21 +1033,21 @@ static void main_window_load(Window *window) {
   s_day_name_layer = text_layer_create(GRect(0, 3, 72, 14));
   text_layer_set_background_color(s_day_name_layer, GColorClear);
   text_layer_set_text_color(s_day_name_layer, GColorBlack);
-  text_layer_set_font(s_day_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_font(s_day_name_layer, fonts_get_system_font(FONT_DAY_NAME));
   text_layer_set_text_alignment(s_day_name_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_day_name_layer));
   
   s_day_number_layer = text_layer_create(GRect(0, 15, 72, 51));
   text_layer_set_background_color(s_day_number_layer, GColorClear);
   text_layer_set_text_color(s_day_number_layer, GColorBlack);
-  text_layer_set_font(s_day_number_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD));
+  text_layer_set_font(s_day_number_layer, fonts_get_system_font(FONT_DAY_NUMBER));
   text_layer_set_text_alignment(s_day_number_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_day_number_layer));
   
   s_month_name_layer = text_layer_create(GRect(0, 62, 72, 71));
   text_layer_set_background_color(s_month_name_layer, GColorClear);
   text_layer_set_text_color(s_month_name_layer, GColorBlack);
-  text_layer_set_font(s_month_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_font(s_month_name_layer, fonts_get_system_font(FONT_MONTH_NAME));
   text_layer_set_text_alignment(s_month_name_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_month_name_layer));
   
@@ -935,14 +1062,14 @@ static void main_window_load(Window *window) {
   s_temperature_layer = text_layer_create(GRect(72, 30, 72, 54));
   text_layer_set_background_color(s_temperature_layer, GColorClear);
   text_layer_set_text_color(s_temperature_layer, GColorBlack);
-  text_layer_set_font(s_temperature_layer, fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
+  text_layer_set_font(s_temperature_layer, fonts_get_system_font(FONT_TEMPERATURE));
   text_layer_set_text_alignment(s_temperature_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_temperature_layer));
   
   s_weather_condition_layer = text_layer_create(GRect(72, 55, 72, 68));
   text_layer_set_background_color(s_weather_condition_layer, GColorClear);
   text_layer_set_text_color(s_weather_condition_layer, GColorBlack);
-  text_layer_set_font(s_weather_condition_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+  text_layer_set_font(s_weather_condition_layer, fonts_get_system_font(FONT_CONDITION));
   text_layer_set_text_alignment(s_weather_condition_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_weather_condition_layer));
   
@@ -950,14 +1077,14 @@ static void main_window_load(Window *window) {
   s_hour_layer = text_layer_create(GRect(0, 90, 72, 126));
   text_layer_set_background_color(s_hour_layer, GColorClear);
   text_layer_set_text_color(s_hour_layer, GColorBlack);
-  text_layer_set_font(s_hour_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD));
+  text_layer_set_font(s_hour_layer, fonts_get_system_font(FONT_TIME));
   text_layer_set_text_alignment(s_hour_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_hour_layer));
   
   s_minute_layer = text_layer_create(GRect(0, 128, 72, 164));
   text_layer_set_background_color(s_minute_layer, GColorClear);
   text_layer_set_text_color(s_minute_layer, GColorDarkGray);
-  text_layer_set_font(s_minute_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD));
+  text_layer_set_font(s_minute_layer, fonts_get_system_font(FONT_TIME));
   text_layer_set_text_alignment(s_minute_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_minute_layer));
   
@@ -972,7 +1099,7 @@ static void main_window_load(Window *window) {
   s_battery_text_layer = text_layer_create(GRect(104, 91, 40, 105));
   text_layer_set_background_color(s_battery_text_layer, GColorClear);
   text_layer_set_text_color(s_battery_text_layer, GColorBlack);
-  text_layer_set_font(s_battery_text_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  text_layer_set_font(s_battery_text_layer, fonts_get_system_font(FONT_BATTERY));
   text_layer_set_text_alignment(s_battery_text_layer, GTextAlignmentLeft);
   layer_add_child(window_layer, text_layer_get_layer(s_battery_text_layer));
   
@@ -984,14 +1111,14 @@ static void main_window_load(Window *window) {
   s_steps_count_layer = text_layer_create(GRect(72, 118, 72, 145));
   text_layer_set_background_color(s_steps_count_layer, GColorClear);
   text_layer_set_text_color(s_steps_count_layer, GColorBlack);
-  text_layer_set_font(s_steps_count_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+  text_layer_set_font(s_steps_count_layer, fonts_get_system_font(FONT_STEPS_COUNT));
   text_layer_set_text_alignment(s_steps_count_layer, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_steps_count_layer));
   
   s_steps_label_layer = text_layer_create(GRect(72, 144, 72, 160));
   text_layer_set_background_color(s_steps_label_layer, GColorClear);
   text_layer_set_text_color(s_steps_label_layer, GColorBlack);
-  text_layer_set_font(s_steps_label_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_font(s_steps_label_layer, fonts_get_system_font(FONT_STEPS_LABEL));
   text_layer_set_text_alignment(s_steps_label_layer, GTextAlignmentCenter);
   text_layer_set_text(s_steps_label_layer, "STEPS");
   layer_add_child(window_layer, text_layer_get_layer(s_steps_label_layer));
