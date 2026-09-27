@@ -10,39 +10,109 @@ var WEATHER_API_URL = 'http://api.weatherapi.com/v1/current.json';
 var MessageKeys = require('message_keys');
 console.log('MessageKeys loaded: ' + JSON.stringify(MessageKeys));
 
+// Global settings state - initialize from localStorage on app load
+var globalSettings = {};
+try {
+  var stored = localStorage.getItem('clay-settings');
+  if (stored) {
+    globalSettings = JSON.parse(stored);
+  }
+} catch (err) {
+  console.log('Failed to load settings from localStorage: ' + err);
+}
+
+// Helpers to read settings regardless of Clay storage shape
+function getBool(settings, key, defaultValue) {
+  var v = settings && settings[key];
+  if (v && typeof v === 'object' && v !== null && 'value' in v) {
+    v = v.value;
+  }
+  if (v === undefined || v === null) return defaultValue;
+  if (typeof v === 'string') {
+    var lower = v.toLowerCase();
+    if (lower === 'true') return true;
+    if (lower === 'false') return false;
+  }
+  return !!v;
+}
+
+// True when the user has actually saved a value for this setting. Used to
+// avoid overwriting the watch's persisted value with a phone-side default
+// (e.g. after the phone's localStorage has been cleared).
+function hasSetting(settings, key) {
+  return !!settings && settings[key] !== undefined && settings[key] !== null;
+}
+
+function getString(settings, key, defaultValue) {
+  var v = settings && settings[key];
+  if (v && typeof v === 'object' && v !== null && 'value' in v) {
+    v = v.value;
+  }
+  if (v === undefined || v === null) return defaultValue;
+  return String(v);
+}
+
 // Map WeatherAPI condition codes to watch icon IDs (0-7)
-function getWeatherIconFromCode(code, conditionText) {
+function getWeatherIconFromCode(code, conditionText, isDay) {
   // Sunny/Clear (icon 0)
-  if (code === 1000) return 0;
+  if (code === 1000) {
+    // If it's night, return moon icon (8)
+    if (isDay === 0) return 8;
+    return 0;
+  }
   
   // Partly cloudy (icon 1)
-  if (code === 1003) return 1;
+  if (code === 1003) {
+    if (isDay === 0) return 9;
+    return 1;
+  }
   
   // Cloudy/Overcast (icon 2)
-  if (code === 1006 || code === 1009) return 2;
+  if (code === 1006 || code === 1009) {
+    if (isDay === 0) return 10;
+    return 2;
+  }
   
   // Light rain/drizzle (icon 3)
   var lightRainCodes = [1063, 1150, 1153, 1168, 1171, 1180, 1183, 1186, 1189, 1240];
-  if (lightRainCodes.indexOf(code) !== -1) return 3;
+  if (lightRainCodes.indexOf(code) !== -1) {
+    if (isDay === 0) return 11;
+    return 3;
+  }
   
   // Heavy rain (icon 4)
   var heavyRainCodes = [1192, 1195, 1198, 1201, 1243, 1246, 1273, 1276];
-  if (heavyRainCodes.indexOf(code) !== -1) return 4;
+  if (heavyRainCodes.indexOf(code) !== -1) {
+    if (isDay === 0) return 12;
+    return 4;
+  }
   
   // Light snow (icon 5)
   var lightSnowCodes = [1066, 1210, 1213, 1216, 1255, 1261, 1279];
-  if (lightSnowCodes.indexOf(code) !== -1) return 5;
+  if (lightSnowCodes.indexOf(code) !== -1) {
+    if (isDay === 0) return 13;
+    return 5;
+  }
   
   // Heavy snow/blizzard (icon 6)
   var heavySnowCodes = [1114, 1117, 1219, 1222, 1225, 1258, 1282];
-  if (heavySnowCodes.indexOf(code) !== -1) return 6;
+  if (heavySnowCodes.indexOf(code) !== -1) {
+    if (isDay === 0) return 14;
+    return 6;
+  }
   
   // Mixed rain and snow (icon 7)
   var mixedCodes = [1069, 1072, 1204, 1207, 1237, 1249, 1252, 1264];
-  if (mixedCodes.indexOf(code) !== -1) return 7;
+  if (mixedCodes.indexOf(code) !== -1) {
+    if (isDay === 0) return 15;
+    return 7;
+  }
   
   // Mist/fog - map to cloudy
-  if (code === 1030 || code === 1135 || code === 1147) return 2;
+  if (code === 1030 || code === 1135 || code === 1147) {
+    if (isDay === 0) return 10;
+    return 2;
+  }
   
   // Fallback: try text-based matching if code is unknown
   if (conditionText) {
@@ -59,7 +129,11 @@ function getWeatherIconFromCode(code, conditionText) {
   return 2;
 }
 
-function fetchWeather(location, useCelsius) {
+function fetchWeather(location) {
+  // Read current settings from localStorage to ensure we have latest values
+  var stored = localStorage.getItem("clay-settings");
+  var currentSettings = stored ? JSON.parse(stored) : {};
+  var useCelsius = getBool(currentSettings, "TemperatureUnit", false);
   console.log('Fetching weather for: ' + location + ', useCelsius: ' + useCelsius);
   
   var url = WEATHER_API_URL + '?key=' + WEATHER_API_KEY + '&q=' + encodeURIComponent(location);
@@ -76,16 +150,26 @@ function fetchWeather(location, useCelsius) {
         var temperature = useCelsius ? response.current.temp_c : response.current.temp_f;
         var condition = response.current.condition.text;
         var conditionCode = response.current.condition.code;
-        var iconCode = getWeatherIconFromCode(conditionCode, condition);
+        var isDay = response.current.is_day;
+        var iconCode = getWeatherIconFromCode(conditionCode, condition, isDay);
         
-        console.log('useCelsius=' + useCelsius + ', temp_c=' + response.current.temp_c + ', temp_f=' + response.current.temp_f + ', selected=' + temperature);
-        console.log('Sending weather: ' + temperature + '°, ' + condition + ' (code: ' + conditionCode + '), icon: ' + iconCode);
+        // Always send raw Fahrenheit - let the watch convert based on its setting
+        var tempFahrenheit = response.current.temp_f;
+        var tempCelsius = response.current.temp_c;
+        
+        console.log('Temperature data - F: ' + tempFahrenheit + ', C: ' + tempCelsius);
+        console.log('Sending weather: F=' + tempFahrenheit + '°F, C=' + tempCelsius + '°C, ' + condition + ' (code: ' + conditionCode + '), icon: ' + iconCode);
         
         // Send weather data to watch
         var dictionary = {};
-        dictionary[MessageKeys.Temperature] = Math.round(temperature);
+        dictionary[MessageKeys.Temperature] = Math.round(tempFahrenheit);
         dictionary[MessageKeys.Condition] = condition;
         dictionary[MessageKeys.WeatherIcon] = iconCode;
+        // Also send the temperature unit setting (if the user has saved one)
+        // so watch can convert properly
+        if (hasSetting(currentSettings, 'TemperatureUnit')) {
+          dictionary[MessageKeys.TemperatureUnit] = getBool(currentSettings, 'TemperatureUnit', false) ? 1 : 0;
+        }
         
         console.log('Dictionary keys: ' + Object.keys(dictionary).join(', '));
         console.log('Dictionary values: ' + JSON.stringify(dictionary));
@@ -117,32 +201,30 @@ function locationSuccess(pos) {
   var coords = pos.coords.latitude + ',' + pos.coords.longitude;
   console.log('Got location: ' + coords);
   
-  var settings = JSON.parse(localStorage.getItem('clay-settings')) || {};
-  var useCelsius = (settings.TemperatureUnit && settings.TemperatureUnit.value) || false;
-  
-  fetchWeather(coords, useCelsius);
+  fetchWeather(coords);
 }
 
 function locationError(err) {
   console.log('Location error: ' + err.message);
   
   // Fall back to ZIP code if available
-  var settings = JSON.parse(localStorage.getItem('clay-settings')) || {};
-  var zipCode = (settings.ZipCode && settings.ZipCode.value) || '';
-  var useCelsius = (settings.TemperatureUnit && settings.TemperatureUnit.value) || false;
+  var stored = localStorage.getItem("clay-settings");
+  var currentSettings = stored ? JSON.parse(stored) : {};
+  var zipCode = getString(currentSettings, 'ZipCode', '');
   
   if (zipCode && zipCode.length > 0) {
-    fetchWeather(zipCode, useCelsius);
+    fetchWeather(zipCode);
   } else {
     console.log('No fallback location available');
   }
 }
 
 function getWeather() {
-  var settings = JSON.parse(localStorage.getItem('clay-settings')) || {};
-  var useGPS = (settings.UseGPS && settings.UseGPS.value !== false); // Default to true
-  var zipCode = (settings.ZipCode && settings.ZipCode.value) || '';
-  var useCelsius = (settings.TemperatureUnit && settings.TemperatureUnit.value) || false;
+  var stored = localStorage.getItem("clay-settings");
+  var currentSettings = stored ? JSON.parse(stored) : {};
+  var useCelsius = getBool(currentSettings, "TemperatureUnit", false);
+  var useGPS = getBool(currentSettings, 'UseGPS', true); // Default to true
+  var zipCode = getString(currentSettings, 'ZipCode', '');
   
   console.log('Getting weather - GPS: ' + useGPS + ', ZIP: ' + zipCode + ', Celsius: ' + useCelsius);
   
@@ -158,7 +240,7 @@ function getWeather() {
     );
   } else if (zipCode.length > 0) {
     // Use manual ZIP code/city
-    fetchWeather(zipCode, useCelsius);
+    fetchWeather(zipCode);
   } else {
     console.log('No location method configured');
   }
@@ -167,6 +249,19 @@ function getWeather() {
 // Listen for when the watchface is opened
 Pebble.addEventListener('ready', function() {
   console.log('PebbleKit JS ready!');
+  
+  // Send the saved temperature unit to the watch immediately. If the phone has
+  // no saved value, leave the watch's persisted setting alone.
+  if (hasSetting(globalSettings, 'TemperatureUnit')) {
+    var settingsDict = {};
+    settingsDict[MessageKeys.TemperatureUnit] = getBool(globalSettings, 'TemperatureUnit', false) ? 1 : 0;
+    console.log('Sending initial TemperatureUnit setting: ' + settingsDict[MessageKeys.TemperatureUnit]);
+    Pebble.sendAppMessage(settingsDict, function() {
+      console.log('Initial settings sent');
+    }, function(e) {
+      console.log('Failed to send initial settings: ' + JSON.stringify(e));
+    });
+  }
   
   // Get initial weather
   getWeather();
@@ -188,9 +283,26 @@ Pebble.addEventListener('webviewclosed', function(e) {
     return;
   }
   
-  // Settings were saved, send them to the watch
+  // Settings were saved, update global state and persist
   var settings = JSON.parse(e.response);
-  console.log('Settings received: ' + JSON.stringify(settings));
+  // Flatten settings before storing in globalSettings
+  var flatSettings = {};
+  for (var key in settings) {
+    if (settings[key] && typeof settings[key] === 'object' && 'value' in settings[key]) {
+      flatSettings[key] = settings[key].value;
+    } else {
+      flatSettings[key] = settings[key];
+    }
+  }
+  globalSettings = flatSettings;  // Update global state with flattened format
+  
+  // Persist the latest settings (same flattened format Clay uses) so
+  // periodic weather updates use the correct values
+  try {
+    localStorage.setItem('clay-settings', JSON.stringify(flatSettings));
+  } catch (err) {
+    console.log('Failed to persist settings: ' + err);
+  }
   
   // Validate module assignments - each module can only appear once
   var modules = [
@@ -279,7 +391,7 @@ Pebble.addEventListener('webviewclosed', function(e) {
       console.log('Settings sent successfully');
       
       // Fetch weather with the updated settings from the event (not localStorage yet)
-      var useCelsius = (settings.TemperatureUnit && settings.TemperatureUnit.value) || false;
+      var useCelsius = !!(settings.TemperatureUnit && settings.TemperatureUnit.value);
       var useGPS = (settings.UseGPS && settings.UseGPS.value !== false);
       var zipCode = (settings.ZipCode && settings.ZipCode.value) || '';
       
@@ -289,12 +401,12 @@ Pebble.addEventListener('webviewclosed', function(e) {
         navigator.geolocation.getCurrentPosition(
           function(pos) {
             var coords = pos.coords.latitude + ',' + pos.coords.longitude;
-            fetchWeather(coords, useCelsius);
+            fetchWeather(coords);
           },
           function(err) {
             console.log('Location error: ' + err.message);
             if (zipCode.length > 0) {
-              fetchWeather(zipCode, useCelsius);
+              fetchWeather(zipCode);
             }
           },
           {
@@ -303,7 +415,7 @@ Pebble.addEventListener('webviewclosed', function(e) {
           }
         );
       } else if (zipCode.length > 0) {
-        fetchWeather(zipCode, useCelsius);
+        fetchWeather(zipCode);
       }
     },
     function(e) {

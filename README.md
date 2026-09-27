@@ -128,6 +128,7 @@ Modules uses the **WeatherAPI.com** service to deliver accurate, real-time weath
 | Setting | Description |
 |---------|-------------|
 | **Temperature Unit** | Toggle between Fahrenheit (°F) and Celsius (°C) |
+| **Alternative day and night icons** | Larger weather icons with night variants (hides the condition text) |
 | **Auto Location (GPS)** | Use phone's GPS for automatic location |
 | **ZIP Code / City** | Manual location entry (used when GPS is disabled) |
 
@@ -320,6 +321,7 @@ This project is open source and available under the [MIT License](LICENSE).
 - **[Rebble Alliance](https://rebble.io/)** - For keeping the Pebble dream alive
 - **[WeatherAPI.com](https://www.weatherapi.com/)** - Weather data provider
 - **[Rebble Clay](https://github.com/pebble-dev/clay)** - Configuration framework
+- **[Andy Hudson-Smith (@digitalurban)](https://github.com/digitalurban)** - Alternative day/night weather icons and the Celsius setting fix
 - The entire **Pebble Community** - For years of innovation and support
 
 ---
