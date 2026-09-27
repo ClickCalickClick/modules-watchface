@@ -19,6 +19,13 @@ module.exports = [
       },
       {
         "type": "toggle",
+        "messageKey": "AltWeatherLayout",
+        "label": "Alternative day and night icons",
+        "description": "Use larger weather icons",
+        "defaultValue": false
+      },
+      {
+        "type": "toggle",
         "messageKey": "UseGPS",
         "label": "Auto Location (GPS)",
         "description": "Use phone's GPS for weather location",
