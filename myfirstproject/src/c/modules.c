@@ -159,8 +159,9 @@ static GColor get_text_color_for_quadrant(int quadrant) {
 
 // Per-platform layouts. All module positions are relative to the quadrant's
 // content box (see get_content_rect).
-#if defined(PBL_PLATFORM_EMERY)
-// Pebble Time 2 (200x228): 100x114 content boxes with larger fonts and icons
+#if defined(PBL_PLATFORM_EMERY) || defined(PBL_ROUND)
+// Pebble Time 2 (200x228) and Pebble Round 2 (260x260): 100x114 content boxes
+// with larger fonts and icons
 
 #define FONT_DAY_NAME     FONT_KEY_GOTHIC_24_BOLD
 #define FONT_DAY_NUMBER   FONT_KEY_ROBOTO_BOLD_SUBSET_49
@@ -206,52 +207,9 @@ static const GRect STATS_LAYOUTS[5] = {
 #define STATS_DIVIDER_Y 44
 #define STATS_DIVIDER_INSET 8
 
-#elif defined(PBL_ROUND)
-// Pebble Round 2 (260x260): the grid is laid out on the square inscribed in
-// the circle so no content is clipped. Each content box is 92x92.
-
-#define FONT_DAY_NAME     FONT_KEY_GOTHIC_18_BOLD
-#define FONT_DAY_NUMBER   FONT_KEY_BITHAM_42_BOLD
-#define FONT_MONTH_NAME   FONT_KEY_GOTHIC_18_BOLD
-#define FONT_TEMPERATURE  FONT_KEY_GOTHIC_28_BOLD
-#define FONT_CONDITION    FONT_KEY_GOTHIC_24_BOLD
-#define FONT_TIME         FONT_KEY_BITHAM_42_BOLD
-#define FONT_BATTERY      FONT_KEY_GOTHIC_18_BOLD
-#define FONT_STEPS_COUNT  FONT_KEY_GOTHIC_24_BOLD
-#define FONT_STEPS_LABEL  FONT_KEY_GOTHIC_14
-
-static const GRect DATE_LAYOUTS[3] = {
-  {{0, 2}, {92, 24}},    // day name
-  {{0, 20}, {92, 50}},   // day number
-  {{0, 68}, {92, 24}}    // month name
-};
-
-static const GRect WEATHER_LAYOUTS_DEFAULT[3] = {
-  {{32, 6}, {28, 28}},   // icon (centered: 92/2 - 28/2 = 32)
-  {{0, 34}, {92, 32}},   // temperature
-  {{0, 60}, {92, 30}}    // condition
-};
-
-static const GRect WEATHER_LAYOUTS_ALT[3] = {
-  {{19, 2}, {54, 54}},   // icon (centered: 92/2 - 54/2 = 19)
-  {{0, 50}, {92, 34}},   // temperature
-  {{0, 92}, {92, 0}}     // condition (hidden)
-};
-
-static const GRect TIME_LAYOUTS[] = {
-  {{0, 2}, {92, 46}},    // Hour label
-  {{0, 42}, {92, 50}}    // Minute label
-};
-
-static const GRect STATS_LAYOUTS[5] = {
-  {{22, 14}, {16, 16}},  // battery icon
-  {{40, 13}, {52, 24}},  // battery text (offset from icon)
-  {{0, 40}, {92, 30}},   // steps count
-  {{0, 66}, {92, 20}}    // steps label
-};
-
-#define STATS_DIVIDER_Y 38
-#define STATS_DIVIDER_INSET 10
+// Content box size on round displays (matches the Time 2 quadrant size)
+#define ROUND_CONTENT_W 100
+#define ROUND_CONTENT_H 114
 
 #else
 // Pebble Classic / Time / Time Steel / 2 / 2 Duo (144x168): 72x84 quadrants
@@ -316,11 +274,14 @@ static GRect get_quadrant_rect(int quadrant) {
 // Area of a quadrant that module content is laid out in
 static GRect get_content_rect(int quadrant) {
 #if defined(PBL_ROUND)
-  // Quadrant of the square inscribed in the circular display
-  int16_t side = s_bounds.size.w * 71 / 100;
-  int16_t inset = (s_bounds.size.w - side) / 2;
-  return GRect(inset + (quadrant % 2) * (side / 2), inset + (quadrant / 2) * (side / 2),
-               side / 2, side / 2);
+  // Boxes meet at the center of the circular display. Module content is
+  // centered in its box, so the box's outer corner (which extends past the
+  // circle) stays empty and nothing visible is clipped.
+  int16_t center_x = s_bounds.size.w / 2;
+  int16_t center_y = s_bounds.size.h / 2;
+  return GRect((quadrant % 2) ? center_x : center_x - ROUND_CONTENT_W,
+               (quadrant / 2) ? center_y : center_y - ROUND_CONTENT_H,
+               ROUND_CONTENT_W, ROUND_CONTENT_H);
 #else
   return get_quadrant_rect(quadrant);
 #endif
